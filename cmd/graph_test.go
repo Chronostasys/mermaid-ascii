@@ -8,6 +8,7 @@ import (
 
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram/testutil"
+	"github.com/pgavlin/mermaid-ascii/pkg/graph"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -17,14 +18,20 @@ func verifyMap(t *testing.T, testCaseFile string, useAscii bool) {
 		t.Fatalf("Failed to read test case file: %v", err)
 	}
 
-	properties, err := mermaidFileToMap(tc.Mermaid, "cli")
+	properties, err := graph.Parse(tc.Mermaid)
 	if err != nil {
 		log.Fatal("Failed to parse mermaid: ", err)
 	}
-	properties.paddingX = tc.PaddingX
-	properties.paddingY = tc.PaddingY
-	properties.useAscii = useAscii
-	actualMap := drawMap(properties)
+	config := &diagram.Config{
+		UseAscii:        useAscii,
+		PaddingBetweenX: tc.PaddingX,
+		PaddingBetweenY: tc.PaddingY,
+		StyleType:       "cli",
+	}
+	actualMap, err := graph.Render(properties, config)
+	if err != nil {
+		t.Fatalf("Failed to render: %v", err)
+	}
 	if tc.Expected != actualMap {
 		expectedWithSpaces := testutil.VisualizeWhitespace(tc.Expected)
 		actualWithSpaces := testutil.VisualizeWhitespace(actualMap)

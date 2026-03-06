@@ -1,4 +1,4 @@
-package cmd
+package graph
 
 import (
 	"errors"
@@ -11,7 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type graphProperties struct {
+type Properties struct {
 	data             *orderedmap.OrderedMap[string, []textEdge]
 	nodeInfo         map[string]textNode // maps node id to its textNode (for shape/label info)
 	styleClasses     *map[string]styleClass
@@ -79,7 +79,7 @@ type textSubgraph struct {
 }
 
 // getSubgraphByID returns the subgraph with the given ID, or nil if not found.
-func (gp *graphProperties) getSubgraphByID(id string) *textSubgraph {
+func (gp *Properties) getSubgraphByID(id string) *textSubgraph {
 	for _, sg := range gp.subgraphs {
 		if sg.id == id {
 			return sg
@@ -91,7 +91,7 @@ func (gp *graphProperties) getSubgraphByID(id string) *textSubgraph {
 // resolveSubgraphNode checks if a node ID refers to a subgraph, and if so,
 // returns the first node inside that subgraph as a proxy. Returns the original
 // node ID if it's not a subgraph reference.
-func (gp *graphProperties) resolveSubgraphNode(nodeID string) string {
+func (gp *Properties) resolveSubgraphNode(nodeID string) string {
 	sg := gp.getSubgraphByID(nodeID)
 	if sg != nil && len(sg.nodes) > 0 {
 		return sg.nodes[0]
@@ -261,7 +261,7 @@ func setData(parent textNode, edge textEdge, data *orderedmap.OrderedMap[string,
 	}
 }
 
-func (gp *graphProperties) parseString(line string) ([]textNode, error) {
+func (gp *Properties) parseString(line string) ([]textNode, error) {
 	log.Debugf("Parsing line: %v", line)
 	var lhs, rhs []textNode
 	var err error
@@ -586,7 +586,9 @@ func (gp *graphProperties) parseString(line string) ([]textNode, error) {
 	return []textNode{}, errors.New("Could not parse line: " + line)
 }
 
-func mermaidFileToMap(mermaid, styleType string) (*graphProperties, error) {
+func Parse(mermaid string) (*Properties, error) {
+	styleType := "cli"
+
 	// Allow split on both \n and the actual string "\n" for curl compatibility
 	newlinePattern := regexp.MustCompile(`\n|\\n`)
 	rawLines := newlinePattern.Split(string(mermaid), -1)
@@ -618,7 +620,7 @@ func mermaidFileToMap(mermaid, styleType string) (*graphProperties, error) {
 	data := orderedmap.NewOrderedMap[string, []textEdge]()
 	styleClasses := make(map[string]styleClass)
 	nodeInfo := make(map[string]textNode)
-	properties := graphProperties{
+	properties := Properties{
 		data:             data,
 		nodeInfo:         nodeInfo,
 		styleClasses:     &styleClasses,
@@ -798,7 +800,7 @@ func mermaidFileToMap(mermaid, styleType string) (*graphProperties, error) {
 
 // resolveSubgraphEdges rewrites edges that reference subgraph IDs so they
 // point to the first node inside that subgraph instead.
-func (gp *graphProperties) resolveSubgraphEdges() {
+func (gp *Properties) resolveSubgraphEdges() {
 	if len(gp.subgraphs) == 0 {
 		return
 	}

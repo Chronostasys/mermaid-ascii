@@ -1,10 +1,11 @@
-package cmd
+package graph
 
 import (
 	"fmt"
 	"strings"
 
 	"github.com/gookit/color"
+	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -132,7 +133,36 @@ func (g *graph) drawLineWithType(d *drawing, from drawingCoord, to drawingCoord,
 	return drawnCoords
 }
 
-func drawMap(properties *graphProperties) string {
+// Render renders a parsed graph Properties into a string using the provided config.
+func Render(properties *Properties, config *diagram.Config) (string, error) {
+	if properties == nil {
+		return "", fmt.Errorf("nil properties")
+	}
+	if config == nil {
+		config = diagram.DefaultConfig()
+	}
+
+	styleType := config.StyleType
+	if styleType == "" {
+		styleType = "cli"
+	}
+	properties.styleType = styleType
+	properties.useAscii = config.UseAscii
+	properties.showCoords = config.ShowCoords
+	if config.BoxBorderPadding > 0 {
+		properties.boxBorderPadding = config.BoxBorderPadding
+	}
+	if config.PaddingBetweenX > 0 {
+		properties.paddingX = config.PaddingBetweenX
+	}
+	if config.PaddingBetweenY > 0 {
+		properties.paddingY = config.PaddingBetweenY
+	}
+
+	return drawMap(properties), nil
+}
+
+func drawMap(properties *Properties) string {
 	g := mkGraph(properties.data, properties.nodeInfo)
 	g.setStyleClasses(properties)
 	g.paddingX = properties.paddingX

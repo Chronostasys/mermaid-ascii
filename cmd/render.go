@@ -1,29 +1,12 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
+	"github.com/pgavlin/mermaid-ascii/pkg/render"
 )
 
+// RenderDiagram parses and renders a Mermaid diagram as ASCII/Unicode text.
+// It delegates to render.Render which auto-detects the diagram type.
 func RenderDiagram(input string, config *diagram.Config) (string, error) {
-	if config == nil {
-		config = diagram.DefaultConfig()
-	}
-
-	diag, err := DiagramFactory(input)
-	if err != nil {
-		return "", fmt.Errorf("failed to detect diagram type: %w", err)
-	}
-
-	if err := diag.Parse(input); err != nil {
-		return "", fmt.Errorf("failed to parse %s diagram: %w", diag.Type(), err)
-	}
-
-	output, err := diag.Render(config)
-	if err != nil {
-		return "", fmt.Errorf("failed to render %s diagram: %w", diag.Type(), err)
-	}
-
-	return output, nil
+	return render.Render(input, config)
 }
