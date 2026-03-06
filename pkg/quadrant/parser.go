@@ -3,26 +3,14 @@ package quadrant
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
+	"github.com/pgavlin/mermaid-ascii/pkg/parser"
 )
 
 // QuadrantKeyword is the keyword that identifies a quadrant chart diagram in Mermaid syntax.
 const QuadrantKeyword = "quadrantChart"
-
-var (
-	titleRegex     = regexp.MustCompile(`^\s*title\s+(.+)$`)
-	xAxisRegex     = regexp.MustCompile(`^\s*x-axis\s+(.+?)(?:\s*-->\s*(.+))?$`)
-	yAxisRegex     = regexp.MustCompile(`^\s*y-axis\s+(.+?)(?:\s*-->\s*(.+))?$`)
-	quadrant1Regex = regexp.MustCompile(`^\s*quadrant-1\s+(.+)$`)
-	quadrant2Regex = regexp.MustCompile(`^\s*quadrant-2\s+(.+)$`)
-	quadrant3Regex = regexp.MustCompile(`^\s*quadrant-3\s+(.+)$`)
-	quadrant4Regex = regexp.MustCompile(`^\s*quadrant-4\s+(.+)$`)
-	pointRegex     = regexp.MustCompile(`^\s*(.+?)\s*:\s*\[\s*([\d.]+)\s*,\s*([\d.]+)\s*\]\s*$`)
-)
 
 // QuadrantChart represents a parsed quadrant chart with axis labels, quadrant names, and data points.
 type QuadrantChart struct {
@@ -65,16 +53,15 @@ func Parse(input string) (*QuadrantChart, error) {
 		return nil, fmt.Errorf("empty input")
 	}
 
-	rawLines := diagram.SplitLines(input)
-	lines := diagram.RemoveComments(rawLines)
-	if len(lines) == 0 {
-		return nil, fmt.Errorf("no content found")
-	}
+	s := parser.NewScanner(input)
+	s.SkipNewlines()
 
-	if strings.TrimSpace(lines[0]) != QuadrantKeyword {
+	tok := s.Peek()
+	if tok.Kind != parser.TokenIdent || tok.Text != QuadrantKeyword {
 		return nil, fmt.Errorf("expected %q keyword", QuadrantKeyword)
 	}
-	lines = lines[1:]
+	s.Next()
+	s.SkipNewlines()
 
 	qc := &QuadrantChart{
 		XAxisLeft:   "Low",
@@ -84,61 +71,122 @@ func Parse(input string) (*QuadrantChart, error) {
 		Points:      []*DataPoint{},
 	}
 
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
+	for !s.AtEnd() {
+		s.SkipNewlines()
+		if s.AtEnd() {
+			break
+		}
+
+		tok := s.Peek()
+		if tok.Kind != parser.TokenIdent {
+			parser.SkipToEndOfLine(s)
 			continue
 		}
 
-		if match := titleRegex.FindStringSubmatch(trimmed); match != nil {
-			qc.Title = strings.TrimSpace(match[1])
+		switch tok.Text {
+		case "title":
+			s.Next()
+			s.SkipWhitespace()
+			qc.Title = strings.TrimSpace(parser.ConsumeRestOfLine(s))
 			continue
-		}
-
-		if match := xAxisRegex.FindStringSubmatch(trimmed); match != nil {
-			qc.XAxisLeft = strings.TrimSpace(match[1])
-			if match[2] != "" {
-				qc.XAxisRight = strings.TrimSpace(match[2])
+		case "x":
+			// "x-axis" tokenizes as Ident("x") Operator("-") Ident("axis")
+			if parseHyphenatedKeyword(s, "x-axis") {
+				s.SkipWhitespace()
+				parseAxis(s, &qc.XAxisLeft, &qc.XAxisRight)
+				continue
 			}
-			continue
-		}
-
-		if match := yAxisRegex.FindStringSubmatch(trimmed); match != nil {
-			qc.YAxisBottom = strings.TrimSpace(match[1])
-			if match[2] != "" {
-				qc.YAxisTop = strings.TrimSpace(match[2])
+		case "y":
+			if parseHyphenatedKeyword(s, "y-axis") {
+				s.SkipWhitespace()
+				parseAxis(s, &qc.YAxisBottom, &qc.YAxisTop)
+				continue
 			}
-			continue
+		case "quadrant":
+			// "quadrant-1" tokenizes as Ident("quadrant") Operator("-") Number("1")
+			saved := s.Save()
+			s.Next()
+			if s.Peek().Kind == parser.TokenOperator && s.Peek().Text == "-" {
+				s.Next()
+				if s.Peek().Kind == parser.TokenNumber {
+					num := s.Next().Text
+					s.SkipWhitespace()
+					text := strings.TrimSpace(parser.ConsumeRestOfLine(s))
+					switch num {
+					case "1":
+						qc.Quadrant1 = text
+					case "2":
+						qc.Quadrant2 = text
+					case "3":
+						qc.Quadrant3 = text
+					case "4":
+						qc.Quadrant4 = text
+					}
+					continue
+				}
+			}
+			s.Restore(saved)
 		}
 
-		if match := quadrant1Regex.FindStringSubmatch(trimmed); match != nil {
-			qc.Quadrant1 = strings.TrimSpace(match[1])
-			continue
-		}
-		if match := quadrant2Regex.FindStringSubmatch(trimmed); match != nil {
-			qc.Quadrant2 = strings.TrimSpace(match[1])
-			continue
-		}
-		if match := quadrant3Regex.FindStringSubmatch(trimmed); match != nil {
-			qc.Quadrant3 = strings.TrimSpace(match[1])
-			continue
-		}
-		if match := quadrant4Regex.FindStringSubmatch(trimmed); match != nil {
-			qc.Quadrant4 = strings.TrimSpace(match[1])
-			continue
-		}
-
-		if match := pointRegex.FindStringSubmatch(trimmed); match != nil {
-			x, _ := strconv.ParseFloat(match[2], 64)
-			y, _ := strconv.ParseFloat(match[3], 64)
-			qc.Points = append(qc.Points, &DataPoint{
-				Label: strings.TrimSpace(match[1]),
-				X:     x,
-				Y:     y,
-			})
-			continue
+		// Try data point: label : [x, y]
+		lineText := strings.TrimSpace(parser.ConsumeRestOfLine(s))
+		if idx := strings.Index(lineText, ":"); idx >= 0 {
+			label := strings.TrimSpace(lineText[:idx])
+			rest := strings.TrimSpace(lineText[idx+1:])
+			if strings.HasPrefix(rest, "[") && strings.HasSuffix(rest, "]") {
+				coords := rest[1 : len(rest)-1]
+				parts := strings.Split(coords, ",")
+				if len(parts) == 2 {
+					x, xerr := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
+					y, yerr := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
+					if xerr == nil && yerr == nil {
+						qc.Points = append(qc.Points, &DataPoint{
+							Label: label,
+							X:     x,
+							Y:     y,
+						})
+					}
+				}
+			}
 		}
 	}
 
 	return qc, nil
+}
+
+// parseHyphenatedKeyword checks if the current position starts with "prefix-suffix" (e.g., "x-axis").
+// Consumes the tokens if matched, restores if not.
+func parseHyphenatedKeyword(s *parser.Scanner, expected string) bool {
+	parts := strings.SplitN(expected, "-", 2)
+	if len(parts) != 2 {
+		return false
+	}
+	saved := s.Save()
+	tok := s.Peek()
+	if tok.Kind != parser.TokenIdent || tok.Text != parts[0] {
+		return false
+	}
+	s.Next()
+	if s.Peek().Kind != parser.TokenOperator || s.Peek().Text != "-" {
+		s.Restore(saved)
+		return false
+	}
+	s.Next()
+	if s.Peek().Kind != parser.TokenIdent || s.Peek().Text != parts[1] {
+		s.Restore(saved)
+		return false
+	}
+	s.Next()
+	return true
+}
+
+// parseAxis parses: label --> label2  or just label
+func parseAxis(s *parser.Scanner, left, right *string) {
+	line := strings.TrimSpace(parser.ConsumeRestOfLine(s))
+	if idx := strings.Index(line, "-->"); idx >= 0 {
+		*left = strings.TrimSpace(line[:idx])
+		*right = strings.TrimSpace(line[idx+3:])
+	} else {
+		*left = line
+	}
 }

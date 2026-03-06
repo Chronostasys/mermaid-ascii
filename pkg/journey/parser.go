@@ -3,21 +3,14 @@ package journey
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
+	"github.com/pgavlin/mermaid-ascii/pkg/parser"
 )
 
 // JourneyKeyword is the keyword that identifies a journey diagram in Mermaid syntax.
 const JourneyKeyword = "journey"
-
-var (
-	titleRegex   = regexp.MustCompile(`^\s*title\s+(.+)$`)
-	sectionRegex = regexp.MustCompile(`^\s*section\s+(.+)$`)
-	taskRegex    = regexp.MustCompile(`^\s*(.+?)\s*:\s*(\d+)\s*(?::\s*(.+))?\s*$`)
-)
 
 // JourneyDiagram represents a parsed user journey diagram with sections and tasks.
 type JourneyDiagram struct {
@@ -58,66 +51,93 @@ func Parse(input string) (*JourneyDiagram, error) {
 		return nil, fmt.Errorf("empty input")
 	}
 
-	rawLines := diagram.SplitLines(input)
-	lines := diagram.RemoveComments(rawLines)
-	if len(lines) == 0 {
-		return nil, fmt.Errorf("no content found")
-	}
+	s := parser.NewScanner(input)
+	s.SkipNewlines()
 
-	if strings.TrimSpace(lines[0]) != JourneyKeyword {
+	tok := s.Peek()
+	if tok.Kind != parser.TokenIdent || tok.Text != JourneyKeyword {
 		return nil, fmt.Errorf("expected %q keyword", JourneyKeyword)
 	}
-	lines = lines[1:]
+	s.Next()
+	s.SkipNewlines()
 
 	jd := &JourneyDiagram{
 		Sections: []*JourneySection{},
 	}
 	var currentSection *JourneySection
 
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
+	for !s.AtEnd() {
+		s.SkipNewlines()
+		if s.AtEnd() {
+			break
+		}
+
+		tok := s.Peek()
+		if tok.Kind != parser.TokenIdent {
+			parser.SkipToEndOfLine(s)
 			continue
 		}
 
-		if match := titleRegex.FindStringSubmatch(trimmed); match != nil {
-			jd.Title = strings.TrimSpace(match[1])
+		// title directive
+		if tok.Text == "title" {
+			s.Next()
+			s.SkipWhitespace()
+			jd.Title = strings.TrimSpace(parser.ConsumeRestOfLine(s))
 			continue
 		}
 
-		if match := sectionRegex.FindStringSubmatch(trimmed); match != nil {
+		// section directive
+		if tok.Text == "section" {
+			s.Next()
+			s.SkipWhitespace()
 			currentSection = &JourneySection{
-				Name:  strings.TrimSpace(match[1]),
+				Name:  strings.TrimSpace(parser.ConsumeRestOfLine(s)),
 				Tasks: []*JourneyTask{},
 			}
 			jd.Sections = append(jd.Sections, currentSection)
 			continue
 		}
 
-		if match := taskRegex.FindStringSubmatch(trimmed); match != nil {
-			score, _ := strconv.Atoi(match[2])
+		// Task line: name : score [: actors]
+		// Collect the full line and parse it
+		lineText := strings.TrimSpace(parser.ConsumeRestOfLine(s))
+
+		if idx := strings.Index(lineText, ":"); idx >= 0 {
+			name := strings.TrimSpace(lineText[:idx])
+			rest := lineText[idx+1:]
+
+			// Split by ":" — first part is score, optional second is actors
+			parts := strings.SplitN(rest, ":", 2)
+			scoreStr := strings.TrimSpace(parts[0])
+			score, err := strconv.Atoi(scoreStr)
+			if err != nil {
+				continue
+			}
+
 			var actors []string
-			if match[3] != "" {
-				for _, a := range strings.Split(match[3], ",") {
-					actors = append(actors, strings.TrimSpace(a))
+			if len(parts) > 1 {
+				for _, a := range strings.Split(parts[1], ",") {
+					a = strings.TrimSpace(a)
+					if a != "" {
+						actors = append(actors, a)
+					}
 				}
 			}
+
 			task := &JourneyTask{
-				Name:   strings.TrimSpace(match[1]),
+				Name:   name,
 				Score:  score,
 				Actors: actors,
 			}
 			if currentSection != nil {
 				currentSection.Tasks = append(currentSection.Tasks, task)
 			} else {
-				// Create default section
 				currentSection = &JourneySection{
 					Name:  "",
 					Tasks: []*JourneyTask{task},
 				}
 				jd.Sections = append(jd.Sections, currentSection)
 			}
-			continue
 		}
 	}
 

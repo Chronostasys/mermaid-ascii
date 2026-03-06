@@ -4,7 +4,6 @@ package kanban
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
@@ -12,11 +11,6 @@ import (
 
 // KanbanKeyword is the Mermaid keyword that identifies a Kanban board diagram.
 const KanbanKeyword = "kanban"
-
-var (
-	columnRegex = regexp.MustCompile(`^\s*(.+)\s*$`)
-	cardRegex   = regexp.MustCompile(`^\s+(.+)\s*$`)
-)
 
 // KanbanBoard represents a parsed Kanban board with columns and cards.
 type KanbanBoard struct {
@@ -48,6 +42,8 @@ func IsKanbanBoard(input string) bool {
 }
 
 // Parse parses a Kanban board from Mermaid-style input.
+// Kanban uses indentation to distinguish columns from cards,
+// so we use line-based parsing rather than the tokenizer.
 func Parse(input string) (*KanbanBoard, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {

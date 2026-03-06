@@ -4,19 +4,14 @@ package packet
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
+	"github.com/pgavlin/mermaid-ascii/pkg/parser"
 )
 
 // PacketKeyword is the Mermaid keyword that identifies a packet diagram.
 const PacketKeyword = "packet-beta"
-
-var (
-	fieldRegex = regexp.MustCompile(`^\s*(\d+)(?:-(\d+))?\s*:\s*"([^"]+)"\s*$`)
-)
 
 // PacketDiagram represents a parsed packet/protocol diagram.
 type PacketDiagram struct {
@@ -50,37 +45,57 @@ func Parse(input string) (*PacketDiagram, error) {
 		return nil, fmt.Errorf("empty input")
 	}
 
-	rawLines := diagram.SplitLines(input)
-	lines := diagram.RemoveComments(rawLines)
-	if len(lines) == 0 {
-		return nil, fmt.Errorf("no content found")
-	}
+	s := parser.NewScanner(input)
+	s.SkipNewlines()
 
-	if strings.TrimSpace(lines[0]) != PacketKeyword {
+	// "packet-beta" tokenizes as Ident("packet") Operator("-") Ident("beta")
+	keyword := collectKeyword(s)
+	if keyword != PacketKeyword {
 		return nil, fmt.Errorf("expected %q keyword", PacketKeyword)
 	}
-	lines = lines[1:]
+	s.SkipNewlines()
 
 	pd := &PacketDiagram{Fields: []*Field{}}
 
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
+	for !s.AtEnd() {
+		s.SkipNewlines()
+		if s.AtEnd() {
+			break
+		}
+
+		// Field: startBit[-endBit] : "label"
+		tok := s.Peek()
+		if tok.Kind == parser.TokenNumber {
+			startBit, _ := strconv.Atoi(s.Next().Text)
+			endBit := startBit
+
+			// Optional -endBit
+			if s.Peek().Kind == parser.TokenOperator && s.Peek().Text == "-" {
+				s.Next() // consume '-'
+				if s.Peek().Kind == parser.TokenNumber {
+					endBit, _ = strconv.Atoi(s.Next().Text)
+				}
+			}
+			s.SkipWhitespace()
+
+			// Expect : "label"
+			if s.Peek().Kind == parser.TokenColon {
+				s.Next()
+				s.SkipWhitespace()
+				if s.Peek().Kind == parser.TokenString {
+					label := s.Next().Text
+					pd.Fields = append(pd.Fields, &Field{
+						StartBit: startBit,
+						EndBit:   endBit,
+						Label:    label,
+					})
+				}
+			}
+			parser.SkipToEndOfLine(s)
 			continue
 		}
 
-		if match := fieldRegex.FindStringSubmatch(trimmed); match != nil {
-			startBit, _ := strconv.Atoi(match[1])
-			endBit := startBit
-			if match[2] != "" {
-				endBit, _ = strconv.Atoi(match[2])
-			}
-			pd.Fields = append(pd.Fields, &Field{
-				StartBit: startBit,
-				EndBit:   endBit,
-				Label:    match[3],
-			})
-		}
+		parser.SkipToEndOfLine(s)
 	}
 
 	if len(pd.Fields) == 0 {
@@ -88,4 +103,20 @@ func Parse(input string) (*PacketDiagram, error) {
 	}
 
 	return pd, nil
+}
+
+func collectKeyword(s *parser.Scanner) string {
+	tok := s.Peek()
+	if tok.Kind != parser.TokenIdent {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(s.Next().Text)
+	if s.Peek().Kind == parser.TokenOperator && s.Peek().Text == "-" {
+		b.WriteString(s.Next().Text)
+		if s.Peek().Kind == parser.TokenIdent {
+			b.WriteString(s.Next().Text)
+		}
+	}
+	return b.String()
 }

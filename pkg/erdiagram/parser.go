@@ -3,38 +3,22 @@ package erdiagram
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
-	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
+	"github.com/pgavlin/mermaid-ascii/pkg/parser"
 )
 
 // ERDiagramKeyword is the Mermaid keyword that identifies an entity-relationship diagram.
 const ERDiagramKeyword = "erDiagram"
 
-var (
-	// relationshipRegex matches: ENTITY1 ||--o{ ENTITY2 : label
-	// Cardinality markers: ||, o|, }|, }o, |o, |{, o{
-	relationshipRegex = regexp.MustCompile(`^\s*(\w+)\s+(\|?\|?[o}]?[|{]?)\s*--\s*([|o}]?[|{]?[o}]?\|?)\s+(\w+)\s*:\s*(.+)\s*$`)
-
-	// entityBlockRegex matches: ENTITY {
-	entityBlockRegex = regexp.MustCompile(`^\s*(\w+)\s*\{\s*$`)
-
-	// attributeRegex matches: type name or type name PK/FK/UK
-	attributeRegex = regexp.MustCompile(`^\s*(\w+)\s+(\w+)(?:\s+(PK|FK|UK))?\s*$`)
-
-	// closingBraceRegex matches a closing brace
-	closingBraceRegex = regexp.MustCompile(`^\s*\}\s*$`)
-)
-
 // Cardinality represents the cardinality of a relationship end.
 type Cardinality int
 
 const (
-	ExactlyOne  Cardinality = iota // ||
-	ZeroOrOne                      // o| or |o
-	OneOrMany                      // }| or |{
-	ZeroOrMany                     // }o or o{
+	ExactlyOne Cardinality = iota // ||
+	ZeroOrOne                     // o| or |o
+	OneOrMany                     // }| or |{
+	ZeroOrMany                    // }o or o{
 )
 
 // Constraint represents a column constraint.
@@ -97,17 +81,15 @@ func Parse(input string) (*ERDiagram, error) {
 		return nil, fmt.Errorf("empty input")
 	}
 
-	rawLines := diagram.SplitLines(input)
-	lines := diagram.RemoveComments(rawLines)
-	if len(lines) == 0 {
-		return nil, fmt.Errorf("no content found")
-	}
+	s := parser.NewScanner(input)
+	s.SkipNewlines()
 
-	first := strings.TrimSpace(lines[0])
-	if !strings.HasPrefix(first, ERDiagramKeyword) {
+	tok := s.Peek()
+	if tok.Kind != parser.TokenIdent || tok.Text != ERDiagramKeyword {
 		return nil, fmt.Errorf("expected %q keyword", ERDiagramKeyword)
 	}
-	lines = lines[1:]
+	s.Next()
+	s.SkipNewlines()
 
 	erd := &ERDiagram{
 		Entities:      []*Entity{},
@@ -115,65 +97,29 @@ func Parse(input string) (*ERDiagram, error) {
 		entityMap:     make(map[string]*Entity),
 	}
 
-	i := 0
-	for i < len(lines) {
-		line := strings.TrimSpace(lines[i])
-		if line == "" {
-			i++
+	for !s.AtEnd() {
+		s.SkipNewlines()
+		if s.AtEnd() {
+			break
+		}
+
+		tok := s.Peek()
+		if tok.Kind != parser.TokenIdent {
+			parser.SkipToEndOfLine(s)
 			continue
 		}
 
-		// Check for entity block: ENTITY {
-		if match := entityBlockRegex.FindStringSubmatch(line); match != nil {
-			entityName := match[1]
-			entity := erd.getOrCreateEntity(entityName)
-			i++
-			// Parse attributes until closing brace
-			for i < len(lines) {
-				attrLine := strings.TrimSpace(lines[i])
-				if closingBraceRegex.MatchString(attrLine) {
-					i++
-					break
-				}
-				if attrLine == "" {
-					i++
-					continue
-				}
-				if attr := parseAttribute(attrLine); attr != nil {
-					entity.Attributes = append(entity.Attributes, attr)
-				}
-				i++
-			}
+		// Try entity block: ENTITY {
+		if tryParseEntityBlock(s, erd) {
 			continue
 		}
 
-		// Check for relationship
-		if match := relationshipRegex.FindStringSubmatch(line); match != nil {
-			from := match[1]
-			leftCard := match[2]
-			rightCard := match[3]
-			to := match[4]
-			label := strings.TrimSpace(match[5])
-
-			erd.getOrCreateEntity(from)
-			erd.getOrCreateEntity(to)
-
-			fromCard := parseCardinality(leftCard)
-			toCard := parseCardinality(rightCard)
-
-			erd.Relationships = append(erd.Relationships, &Relationship{
-				From:            from,
-				To:              to,
-				Label:           label,
-				FromCardinality: fromCard,
-				ToCardinality:   toCard,
-			})
-			i++
+		// Try relationship: ENTITY1 cardinality--cardinality ENTITY2 : label
+		if tryParseRelationship(s, erd) {
 			continue
 		}
 
-		// Unknown line, skip
-		i++
+		parser.SkipToEndOfLine(s)
 	}
 
 	if len(erd.Entities) == 0 {
@@ -181,6 +127,166 @@ func Parse(input string) (*ERDiagram, error) {
 	}
 
 	return erd, nil
+}
+
+func tryParseEntityBlock(s *parser.Scanner, erd *ERDiagram) bool {
+	saved := s.Save()
+
+	nameTok := s.Peek()
+	if nameTok.Kind != parser.TokenIdent {
+		return false
+	}
+	name := s.Next().Text
+	s.SkipWhitespace()
+
+	if s.Peek().Kind != parser.TokenLBrace {
+		s.Restore(saved)
+		return false
+	}
+	s.Next() // consume '{'
+	s.SkipNewlines()
+
+	entity := erd.getOrCreateEntity(name)
+
+	// Parse attributes until '}'
+	for !s.AtEnd() {
+		tok := s.Peek()
+		if tok.Kind == parser.TokenRBrace {
+			s.Next()
+			break
+		}
+
+		// Parse attribute: type name [PK|FK|UK]
+		if tok.Kind == parser.TokenIdent {
+			attrType := s.Next().Text
+			s.SkipWhitespace()
+			if s.Peek().Kind == parser.TokenIdent {
+				attrName := s.Next().Text
+				s.SkipWhitespace()
+
+				constraint := NoConstraint
+				if s.Peek().Kind == parser.TokenIdent {
+					switch s.Peek().Text {
+					case "PK":
+						constraint = PrimaryKey
+						s.Next()
+					case "FK":
+						constraint = ForeignKey
+						s.Next()
+					case "UK":
+						constraint = UniqueKey
+						s.Next()
+					}
+				}
+				entity.Attributes = append(entity.Attributes, &Attribute{
+					Type:       attrType,
+					Name:       attrName,
+					Constraint: constraint,
+				})
+			}
+		}
+		parser.SkipToEndOfLine(s)
+		s.SkipNewlines()
+	}
+	return true
+}
+
+// tryParseRelationship parses: ENTITY1 cardinality--cardinality ENTITY2 : label
+// Cardinality markers: ||, o|, |o, }|, |{, }o, o{
+// The "--" connects the two cardinality markers.
+func tryParseRelationship(s *parser.Scanner, erd *ERDiagram) bool {
+	saved := s.Save()
+
+	fromTok := s.Peek()
+	if fromTok.Kind != parser.TokenIdent {
+		return false
+	}
+	from := s.Next().Text
+	s.SkipWhitespace()
+
+	// Collect left cardinality + "--" + right cardinality
+	// These tokenize as combinations of Pipe, RBrace, Operator, Ident("o")
+	leftCard := collectCardinality(s)
+	if leftCard == "" {
+		s.Restore(saved)
+		return false
+	}
+
+	// Expect operator starting with "--"
+	opTok := s.Peek()
+	if opTok.Kind != parser.TokenOperator || !strings.HasPrefix(opTok.Text, "--") {
+		s.Restore(saved)
+		return false
+	}
+	s.Next()
+
+	// The operator may include the start of the right cardinality
+	// e.g., "--o" → separator "--" + right cardinality prefix "o"
+	rightPrefix := strings.TrimPrefix(opTok.Text, "--")
+
+	// Collect right cardinality
+	rightCard := rightPrefix + collectCardinality(s)
+	if rightCard == "" {
+		s.Restore(saved)
+		return false
+	}
+
+	s.SkipWhitespace()
+
+	// Expect entity name
+	toTok := s.Peek()
+	if toTok.Kind != parser.TokenIdent {
+		s.Restore(saved)
+		return false
+	}
+	to := s.Next().Text
+	s.SkipWhitespace()
+
+	// Expect : label
+	if s.Peek().Kind != parser.TokenColon {
+		s.Restore(saved)
+		return false
+	}
+	s.Next()
+	s.SkipWhitespace()
+	label := strings.TrimSpace(parser.ConsumeRestOfLine(s))
+
+	erd.getOrCreateEntity(from)
+	erd.getOrCreateEntity(to)
+
+	erd.Relationships = append(erd.Relationships, &Relationship{
+		From:            from,
+		To:              to,
+		Label:           label,
+		FromCardinality: parseCardinality(leftCard),
+		ToCardinality:   parseCardinality(rightCard),
+	})
+	return true
+}
+
+// collectCardinality collects cardinality marker tokens like ||, o|, }|, |{, }o, o{.
+// These are composed of Pipe, RBrace, LBrace, and Ident("o") tokens.
+func collectCardinality(s *parser.Scanner) string {
+	var parts []string
+	for {
+		tok := s.Peek()
+		switch tok.Kind {
+		case parser.TokenPipe:
+			parts = append(parts, s.Next().Text)
+		case parser.TokenRBrace:
+			parts = append(parts, s.Next().Text)
+		case parser.TokenLBrace:
+			parts = append(parts, s.Next().Text)
+		case parser.TokenIdent:
+			if tok.Text == "o" {
+				parts = append(parts, s.Next().Text)
+			} else {
+				return strings.Join(parts, "")
+			}
+		default:
+			return strings.Join(parts, "")
+		}
+	}
 }
 
 func (erd *ERDiagram) getOrCreateEntity(name string) *Entity {
@@ -197,31 +303,6 @@ func (erd *ERDiagram) getOrCreateEntity(name string) *Entity {
 	return e
 }
 
-func parseAttribute(line string) *Attribute {
-	match := attributeRegex.FindStringSubmatch(line)
-	if match == nil {
-		return nil
-	}
-
-	constraint := NoConstraint
-	if match[3] != "" {
-		switch match[3] {
-		case "PK":
-			constraint = PrimaryKey
-		case "FK":
-			constraint = ForeignKey
-		case "UK":
-			constraint = UniqueKey
-		}
-	}
-
-	return &Attribute{
-		Type:       match[1],
-		Name:       match[2],
-		Constraint: constraint,
-	}
-}
-
 func parseCardinality(s string) Cardinality {
 	s = strings.TrimSpace(s)
 	switch s {
@@ -234,7 +315,6 @@ func parseCardinality(s string) Cardinality {
 	case "}o", "o{":
 		return ZeroOrMany
 	default:
-		// Try to infer from partial matches
 		if strings.Contains(s, "}") && strings.Contains(s, "o") {
 			return ZeroOrMany
 		}

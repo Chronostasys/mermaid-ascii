@@ -3,22 +3,13 @@ package gitgraph
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
-	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
+	"github.com/pgavlin/mermaid-ascii/pkg/parser"
 )
 
 // GitGraphKeyword is the keyword that identifies a gitGraph diagram in Mermaid syntax.
 const GitGraphKeyword = "gitGraph"
-
-var (
-	commitRegex     = regexp.MustCompile(`^\s*commit(?:\s+id:\s*"([^"]*)")?(?:\s+msg:\s*"([^"]*)")?(?:\s+tag:\s*"([^"]*)")?(?:\s+type:\s*(NORMAL|REVERSE|HIGHLIGHT))?\s*$`)
-	branchRegex     = regexp.MustCompile(`^\s*branch\s+(\S+)\s*$`)
-	checkoutRegex   = regexp.MustCompile(`^\s*checkout\s+(\S+)\s*$`)
-	mergeRegex      = regexp.MustCompile(`^\s*merge\s+(\S+)(?:\s+id:\s*"([^"]*)")?(?:\s+tag:\s*"([^"]*)")?\s*$`)
-	cherryPickRegex = regexp.MustCompile(`^\s*cherry-pick\s+id:\s*"([^"]+)"\s*$`)
-)
 
 // GitGraph represents a parsed git graph diagram containing commits and branches.
 type GitGraph struct {
@@ -77,16 +68,15 @@ func Parse(input string) (*GitGraph, error) {
 		return nil, fmt.Errorf("empty input")
 	}
 
-	rawLines := diagram.SplitLines(input)
-	lines := diagram.RemoveComments(rawLines)
-	if len(lines) == 0 {
-		return nil, fmt.Errorf("no content found")
-	}
+	s := parser.NewScanner(input)
+	s.SkipNewlines()
 
-	if strings.TrimSpace(lines[0]) != GitGraphKeyword {
+	tok := s.Peek()
+	if tok.Kind != parser.TokenIdent || tok.Text != GitGraphKeyword {
 		return nil, fmt.Errorf("expected %q keyword", GitGraphKeyword)
 	}
-	lines = lines[1:]
+	s.Next()
+	s.SkipNewlines()
 
 	gg := &GitGraph{
 		Commits:       []*Commit{},
@@ -94,100 +84,133 @@ func Parse(input string) (*GitGraph, error) {
 		CurrentBranch: "main",
 	}
 
-	// Create default main branch
 	mainBranch := &Branch{Name: "main", Lane: 0}
 	gg.Branches = append(gg.Branches, mainBranch)
 	branchMap := map[string]*Branch{"main": mainBranch}
 	nextLane := 1
 	commitCounter := 0
 
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
+	for !s.AtEnd() {
+		s.SkipNewlines()
+		if s.AtEnd() {
+			break
+		}
+
+		tok := s.Peek()
+		if tok.Kind != parser.TokenIdent {
+			parser.SkipToEndOfLine(s)
 			continue
 		}
 
-		if match := branchRegex.FindStringSubmatch(trimmed); match != nil {
-			name := match[1]
-			if _, exists := branchMap[name]; !exists {
-				branch := &Branch{Name: name, Lane: nextLane}
-				if len(gg.Commits) > 0 {
-					branch.StartCommit = gg.Commits[len(gg.Commits)-1].ID
+		switch tok.Text {
+		case "branch":
+			s.Next()
+			s.SkipWhitespace()
+			name := ""
+			if s.Peek().Kind == parser.TokenIdent {
+				name = s.Next().Text
+			}
+			if name != "" {
+				if _, exists := branchMap[name]; !exists {
+					branch := &Branch{Name: name, Lane: nextLane}
+					if len(gg.Commits) > 0 {
+						branch.StartCommit = gg.Commits[len(gg.Commits)-1].ID
+					}
+					gg.Branches = append(gg.Branches, branch)
+					branchMap[name] = branch
+					nextLane++
 				}
-				gg.Branches = append(gg.Branches, branch)
-				branchMap[name] = branch
-				nextLane++
 			}
-			continue
-		}
+			parser.SkipToEndOfLine(s)
 
-		if match := checkoutRegex.FindStringSubmatch(trimmed); match != nil {
-			name := match[1]
-			if _, exists := branchMap[name]; exists {
-				gg.CurrentBranch = name
+		case "checkout":
+			s.Next()
+			s.SkipWhitespace()
+			if s.Peek().Kind == parser.TokenIdent {
+				name := s.Next().Text
+				if _, exists := branchMap[name]; exists {
+					gg.CurrentBranch = name
+				}
 			}
-			continue
-		}
+			parser.SkipToEndOfLine(s)
 
-		if match := commitRegex.FindStringSubmatch(trimmed); match != nil {
-			id := match[1]
+		case "commit":
+			s.Next()
+			s.SkipWhitespace()
+			id, msg, tag, commitType := parseCommitArgs(s)
 			if id == "" {
 				id = fmt.Sprintf("c%d", commitCounter)
 			}
 			commitCounter++
 
-			commitType := Normal
-			if match[4] == "REVERSE" {
-				commitType = Reverse
-			} else if match[4] == "HIGHLIGHT" {
-				commitType = Highlight
-			}
-
 			branch := branchMap[gg.CurrentBranch]
-			commit := &Commit{
+			gg.Commits = append(gg.Commits, &Commit{
 				ID:      id,
-				Message: match[2],
-				Tag:     match[3],
+				Message: msg,
+				Tag:     tag,
 				Type:    commitType,
 				Branch:  gg.CurrentBranch,
 				Lane:    branch.Lane,
-			}
-			gg.Commits = append(gg.Commits, commit)
-			continue
-		}
+			})
 
-		if match := mergeRegex.FindStringSubmatch(trimmed); match != nil {
-			sourceBranch := match[1]
-			id := match[2]
+		case "merge":
+			s.Next()
+			s.SkipWhitespace()
+			sourceBranch := ""
+			if s.Peek().Kind == parser.TokenIdent {
+				sourceBranch = s.Next().Text
+			}
+			s.SkipWhitespace()
+			id, _, tag, _ := parseCommitArgs(s)
 			if id == "" {
 				id = fmt.Sprintf("m%d", commitCounter)
 			}
 			commitCounter++
 
 			branch := branchMap[gg.CurrentBranch]
-			commit := &Commit{
+			gg.Commits = append(gg.Commits, &Commit{
 				ID:      id,
-				Tag:     match[3],
+				Tag:     tag,
 				Branch:  gg.CurrentBranch,
 				Lane:    branch.Lane,
 				Parents: []string{sourceBranch},
-			}
-			gg.Commits = append(gg.Commits, commit)
-			continue
-		}
+			})
 
-		if match := cherryPickRegex.FindStringSubmatch(trimmed); match != nil {
+		case "cherry":
+			// "cherry-pick" tokenizes as Ident("cherry") Operator("-") Ident("pick")
+			s.Next()
+			if s.Peek().Kind == parser.TokenOperator && s.Peek().Text == "-" {
+				s.Next()
+				if s.Peek().Kind == parser.TokenIdent && s.Peek().Text == "pick" {
+					s.Next()
+				}
+			}
+			s.SkipWhitespace()
+			// Expect id: "commitId"
+			cherryID := ""
+			if s.Peek().Kind == parser.TokenIdent && s.Peek().Text == "id" {
+				s.Next()
+				if s.Peek().Kind == parser.TokenColon {
+					s.Next()
+					s.SkipWhitespace()
+					if s.Peek().Kind == parser.TokenString {
+						cherryID = s.Next().Text
+					}
+				}
+			}
 			commitCounter++
 			branch := branchMap[gg.CurrentBranch]
-			commit := &Commit{
+			gg.Commits = append(gg.Commits, &Commit{
 				ID:      fmt.Sprintf("cp%d", commitCounter),
-				Message: "cherry-pick " + match[1],
+				Message: "cherry-pick " + cherryID,
 				Branch:  gg.CurrentBranch,
 				Lane:    branch.Lane,
-				Parents: []string{match[1]},
-			}
-			gg.Commits = append(gg.Commits, commit)
-			continue
+				Parents: []string{cherryID},
+			})
+			parser.SkipToEndOfLine(s)
+
+		default:
+			parser.SkipToEndOfLine(s)
 		}
 	}
 
@@ -196,4 +219,51 @@ func Parse(input string) (*GitGraph, error) {
 	}
 
 	return gg, nil
+}
+
+// parseCommitArgs parses optional key:value args like id: "x" msg: "y" tag: "z" type: NORMAL
+func parseCommitArgs(s *parser.Scanner) (id, msg, tag string, commitType CommitType) {
+	for !s.AtEnd() {
+		tok := s.Peek()
+		if tok.Kind == parser.TokenNewline || tok.Kind == parser.TokenEOF {
+			break
+		}
+		if tok.Kind != parser.TokenIdent {
+			s.Next()
+			continue
+		}
+		key := tok.Text
+		s.Next()
+		if s.Peek().Kind != parser.TokenColon {
+			continue
+		}
+		s.Next() // consume ':'
+		s.SkipWhitespace()
+
+		switch key {
+		case "id":
+			if s.Peek().Kind == parser.TokenString {
+				id = s.Next().Text
+			}
+		case "msg":
+			if s.Peek().Kind == parser.TokenString {
+				msg = s.Next().Text
+			}
+		case "tag":
+			if s.Peek().Kind == parser.TokenString {
+				tag = s.Next().Text
+			}
+		case "type":
+			if s.Peek().Kind == parser.TokenIdent {
+				switch s.Next().Text {
+				case "REVERSE":
+					commitType = Reverse
+				case "HIGHLIGHT":
+					commitType = Highlight
+				}
+			}
+		}
+		s.SkipWhitespace()
+	}
+	return
 }

@@ -3,20 +3,13 @@ package timeline
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
-	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
+	"github.com/pgavlin/mermaid-ascii/pkg/parser"
 )
 
 // TimelineKeyword is the keyword that identifies a timeline diagram in Mermaid syntax.
 const TimelineKeyword = "timeline"
-
-var (
-	titleRegex   = regexp.MustCompile(`^\s*title\s+(.+)$`)
-	sectionRegex = regexp.MustCompile(`^\s*section\s+(.+)$`)
-	eventRegex   = regexp.MustCompile(`^\s*(.+?)\s*:\s*(.+)$`)
-)
 
 // TimelineDiagram represents a parsed timeline diagram with optional sections and events.
 type TimelineDiagram struct {
@@ -58,16 +51,15 @@ func Parse(input string) (*TimelineDiagram, error) {
 		return nil, fmt.Errorf("empty input")
 	}
 
-	rawLines := diagram.SplitLines(input)
-	lines := diagram.RemoveComments(rawLines)
-	if len(lines) == 0 {
-		return nil, fmt.Errorf("no content found")
-	}
+	s := parser.NewScanner(input)
+	s.SkipNewlines()
 
-	if strings.TrimSpace(lines[0]) != TimelineKeyword {
+	tok := s.Peek()
+	if tok.Kind != parser.TokenIdent || tok.Text != TimelineKeyword {
 		return nil, fmt.Errorf("expected %q keyword", TimelineKeyword)
 	}
-	lines = lines[1:]
+	s.Next()
+	s.SkipNewlines()
 
 	td := &TimelineDiagram{
 		Sections: []*TimelineSection{},
@@ -75,29 +67,39 @@ func Parse(input string) (*TimelineDiagram, error) {
 	}
 	var currentSection *TimelineSection
 
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
+	for !s.AtEnd() {
+		s.SkipNewlines()
+		if s.AtEnd() {
+			break
+		}
+
+		tok := s.Peek()
+		if tok.Kind == parser.TokenIdent && tok.Text == "title" {
+			s.Next()
+			s.SkipWhitespace()
+			td.Title = strings.TrimSpace(parser.ConsumeRestOfLine(s))
 			continue
 		}
 
-		if match := titleRegex.FindStringSubmatch(trimmed); match != nil {
-			td.Title = strings.TrimSpace(match[1])
-			continue
-		}
-
-		if match := sectionRegex.FindStringSubmatch(trimmed); match != nil {
+		if tok.Kind == parser.TokenIdent && tok.Text == "section" {
+			s.Next()
+			s.SkipWhitespace()
 			currentSection = &TimelineSection{
-				Name:   strings.TrimSpace(match[1]),
+				Name:   strings.TrimSpace(parser.ConsumeRestOfLine(s)),
 				Events: []*TimelineEvent{},
 			}
 			td.Sections = append(td.Sections, currentSection)
 			continue
 		}
 
-		if match := eventRegex.FindStringSubmatch(trimmed); match != nil {
-			period := strings.TrimSpace(match[1])
-			eventTexts := strings.Split(match[2], ":")
+		// Event line: period : event1 : event2 ...
+		// or bare period (no colon)
+		fullLine := strings.TrimSpace(parser.ConsumeRestOfLine(s))
+
+		if idx := strings.Index(fullLine, ":"); idx >= 0 {
+			period := strings.TrimSpace(fullLine[:idx])
+			rest := fullLine[idx+1:]
+			eventTexts := strings.Split(rest, ":")
 			events := make([]string, 0, len(eventTexts))
 			for _, e := range eventTexts {
 				e = strings.TrimSpace(e)
@@ -105,7 +107,6 @@ func Parse(input string) (*TimelineDiagram, error) {
 					events = append(events, e)
 				}
 			}
-
 			event := &TimelineEvent{
 				Period:  period,
 				Events:  events,
@@ -115,19 +116,18 @@ func Parse(input string) (*TimelineDiagram, error) {
 				currentSection.Events = append(currentSection.Events, event)
 			}
 			td.Events = append(td.Events, event)
-			continue
+		} else {
+			// Bare period
+			event := &TimelineEvent{
+				Period:  fullLine,
+				Events:  []string{},
+				Section: currentSection,
+			}
+			if currentSection != nil {
+				currentSection.Events = append(currentSection.Events, event)
+			}
+			td.Events = append(td.Events, event)
 		}
-
-		// Bare line is a period without events
-		event := &TimelineEvent{
-			Period:  trimmed,
-			Events:  []string{},
-			Section: currentSection,
-		}
-		if currentSection != nil {
-			currentSection.Events = append(currentSection.Events, event)
-		}
-		td.Events = append(td.Events, event)
 	}
 
 	if len(td.Events) == 0 {

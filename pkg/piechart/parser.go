@@ -3,20 +3,14 @@ package piechart
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
+	"github.com/pgavlin/mermaid-ascii/pkg/parser"
 )
 
 // PieKeyword is the Mermaid keyword that identifies a pie chart.
 const PieKeyword = "pie"
-
-var (
-	titleRegex = regexp.MustCompile(`^\s*title\s+(.+)$`)
-	sliceRegex = regexp.MustCompile(`^\s*"([^"]+)"\s*:\s*([\d.]+)\s*$`)
-)
 
 // PieChart represents a parsed pie chart with a title and data slices.
 type PieChart struct {
@@ -52,53 +46,71 @@ func Parse(input string) (*PieChart, error) {
 		return nil, fmt.Errorf("empty input")
 	}
 
-	rawLines := diagram.SplitLines(input)
-	lines := diagram.RemoveComments(rawLines)
-	if len(lines) == 0 {
-		return nil, fmt.Errorf("no content found")
-	}
+	s := parser.NewScanner(input)
+	s.SkipNewlines()
 
-	first := strings.TrimSpace(lines[0])
-	if first != PieKeyword && !strings.HasPrefix(first, PieKeyword+" ") {
+	// Expect "pie"
+	tok := s.Peek()
+	if tok.Kind != parser.TokenIdent || tok.Text != PieKeyword {
 		return nil, fmt.Errorf("expected %q keyword", PieKeyword)
 	}
+	s.Next()
+
+	pc := &PieChart{Slices: []*Slice{}}
 
 	// Check for inline title: "pie title My Title"
-	pc := &PieChart{
-		Slices: []*Slice{},
+	s.SkipWhitespace()
+	if s.Peek().Kind == parser.TokenIdent && s.Peek().Text == "title" {
+		s.Next()
+		s.SkipWhitespace()
+		pc.Title = strings.TrimSpace(parser.ConsumeRestOfLine(s))
 	}
-	if strings.HasPrefix(first, PieKeyword+" title ") {
-		pc.Title = strings.TrimPrefix(first, PieKeyword+" title ")
-	}
-	lines = lines[1:]
+	s.SkipNewlines()
 
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
+	for !s.AtEnd() {
+		s.SkipNewlines()
+		if s.AtEnd() {
+			break
+		}
+
+		tok := s.Peek()
+
+		// title directive
+		if tok.Kind == parser.TokenIdent && tok.Text == "title" {
+			s.Next()
+			s.SkipWhitespace()
+			pc.Title = strings.TrimSpace(parser.ConsumeRestOfLine(s))
 			continue
 		}
 
-		if match := titleRegex.FindStringSubmatch(trimmed); match != nil {
-			pc.Title = strings.TrimSpace(match[1])
+		// showData keyword — ignored
+		if tok.Kind == parser.TokenIdent && tok.Text == "showData" {
+			s.Next()
 			continue
 		}
 
-		if match := sliceRegex.FindStringSubmatch(trimmed); match != nil {
-			value, err := strconv.ParseFloat(match[2], 64)
-			if err != nil {
-				continue
+		// Slice: "label" : value
+		if tok.Kind == parser.TokenString {
+			label := s.Next().Text
+			s.SkipWhitespace()
+			if s.Peek().Kind == parser.TokenColon {
+				s.Next()
+				s.SkipWhitespace()
+				if s.Peek().Kind == parser.TokenNumber {
+					value, err := strconv.ParseFloat(s.Next().Text, 64)
+					if err == nil {
+						pc.Slices = append(pc.Slices, &Slice{
+							Label: label,
+							Value: value,
+						})
+					}
+				}
 			}
-			pc.Slices = append(pc.Slices, &Slice{
-				Label: match[1],
-				Value: value,
-			})
+			parser.SkipToEndOfLine(s)
 			continue
 		}
 
-		// Check for "showData" keyword - ignored in ASCII
-		if trimmed == "showData" {
-			continue
-		}
+		parser.SkipToEndOfLine(s)
 	}
 
 	if len(pc.Slices) == 0 {
@@ -107,12 +119,12 @@ func Parse(input string) (*PieChart, error) {
 
 	// Calculate percentages
 	total := 0.0
-	for _, s := range pc.Slices {
-		total += s.Value
+	for _, sl := range pc.Slices {
+		total += sl.Value
 	}
 	pc.Total = total
-	for _, s := range pc.Slices {
-		s.Percentage = (s.Value / total) * 100
+	for _, sl := range pc.Slices {
+		sl.Percentage = (sl.Value / total) * 100
 	}
 
 	return pc, nil

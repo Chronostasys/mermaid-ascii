@@ -3,23 +3,15 @@ package gantt
 
 import (
 	"fmt"
-	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
+	"github.com/pgavlin/mermaid-ascii/pkg/parser"
 )
 
 // GanttKeyword is the Mermaid keyword that identifies a Gantt chart.
 const GanttKeyword = "gantt"
-
-var (
-	titleRegex      = regexp.MustCompile(`^\s*title\s+(.+)$`)
-	dateFormatRegex = regexp.MustCompile(`^\s*dateFormat\s+(.+)$`)
-	sectionRegex    = regexp.MustCompile(`^\s*section\s+(.+)$`)
-	excludesRegex   = regexp.MustCompile(`^\s*excludes\s+(.+)$`)
-	taskRegex       = regexp.MustCompile(`^\s*(.+?)\s*:\s*(.+)$`)
-)
 
 // GanttDiagram represents a parsed Gantt chart with sections and tasks.
 type GanttDiagram struct {
@@ -67,16 +59,15 @@ func Parse(input string) (*GanttDiagram, error) {
 		return nil, fmt.Errorf("empty input")
 	}
 
-	rawLines := diagram.SplitLines(input)
-	lines := diagram.RemoveComments(rawLines)
-	if len(lines) == 0 {
-		return nil, fmt.Errorf("no content found")
-	}
+	s := parser.NewScanner(input)
+	s.SkipNewlines()
 
-	if strings.TrimSpace(lines[0]) != GanttKeyword {
+	tok := s.Peek()
+	if tok.Kind != parser.TokenIdent || tok.Text != GanttKeyword {
 		return nil, fmt.Errorf("expected %q keyword", GanttKeyword)
 	}
-	lines = lines[1:]
+	s.Next()
+	s.SkipNewlines()
 
 	gd := &GanttDiagram{
 		DateFormat: "YYYY-MM-DD",
@@ -88,39 +79,57 @@ func Parse(input string) (*GanttDiagram, error) {
 	baseDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	tasksByID := make(map[string]*Task)
 
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
+	for !s.AtEnd() {
+		s.SkipNewlines()
+		if s.AtEnd() {
+			break
+		}
+
+		tok := s.Peek()
+		if tok.Kind != parser.TokenIdent {
+			parser.SkipToEndOfLine(s)
 			continue
 		}
 
-		if match := titleRegex.FindStringSubmatch(trimmed); match != nil {
-			gd.Title = strings.TrimSpace(match[1])
+		switch tok.Text {
+		case "title":
+			s.Next()
+			s.SkipWhitespace()
+			gd.Title = strings.TrimSpace(parser.ConsumeRestOfLine(s))
 			continue
-		}
 
-		if match := dateFormatRegex.FindStringSubmatch(trimmed); match != nil {
-			gd.DateFormat = strings.TrimSpace(match[1])
+		case "dateFormat":
+			s.Next()
+			s.SkipWhitespace()
+			gd.DateFormat = strings.TrimSpace(parser.ConsumeRestOfLine(s))
 			continue
-		}
 
-		if excludesRegex.MatchString(trimmed) {
-			continue // acknowledged but not rendered differently
-		}
+		case "excludes":
+			s.Next()
+			parser.SkipToEndOfLine(s)
+			continue
 
-		if match := sectionRegex.FindStringSubmatch(trimmed); match != nil {
+		case "section":
+			s.Next()
+			s.SkipWhitespace()
 			currentSection = &Section{
-				Name:  strings.TrimSpace(match[1]),
+				Name:  strings.TrimSpace(parser.ConsumeRestOfLine(s)),
 				Tasks: []*Task{},
 			}
 			gd.Sections = append(gd.Sections, currentSection)
 			continue
 		}
 
-		if match := taskRegex.FindStringSubmatch(trimmed); match != nil {
-			task, err := parseTask(match[1], match[2], baseDate, tasksByID, gd.DateFormat)
+		// Task line: collect full line text and parse as "name : spec"
+		lineText := strings.TrimSpace(parser.ConsumeRestOfLine(s))
+
+		if idx := strings.Index(lineText, ":"); idx >= 0 {
+			name := strings.TrimSpace(lineText[:idx])
+			spec := strings.TrimSpace(lineText[idx+1:])
+
+			task, err := parseTask(name, spec, baseDate, tasksByID, gd.DateFormat)
 			if err != nil {
-				continue // skip unparseable tasks
+				continue
 			}
 			task.Section = currentSection
 			if currentSection != nil {
@@ -133,7 +142,6 @@ func Parse(input string) (*GanttDiagram, error) {
 			if task.EndDate.After(baseDate) {
 				baseDate = task.EndDate
 			}
-			continue
 		}
 	}
 
@@ -252,23 +260,31 @@ func isDuration(s string) bool {
 
 func parseDuration(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
-	durationRegex := regexp.MustCompile(`^(\d+)(d|h|m|w)$`)
-	match := durationRegex.FindStringSubmatch(s)
-	if match == nil {
+	if len(s) < 2 {
 		return 0, fmt.Errorf("invalid duration: %s", s)
 	}
+
+	unit := s[len(s)-1]
+	numStr := s[:len(s)-1]
+
 	var multiplier time.Duration
-	switch match[2] {
-	case "d":
+	switch unit {
+	case 'd':
 		multiplier = 24 * time.Hour
-	case "h":
+	case 'h':
 		multiplier = time.Hour
-	case "m":
+	case 'm':
 		multiplier = time.Minute
-	case "w":
+	case 'w':
 		multiplier = 7 * 24 * time.Hour
+	default:
+		return 0, fmt.Errorf("invalid duration: %s", s)
 	}
-	n := 0
-	fmt.Sscanf(match[1], "%d", &n)
+
+	n, err := strconv.Atoi(numStr)
+	if err != nil {
+		return 0, fmt.Errorf("invalid duration: %s", s)
+	}
+
 	return time.Duration(n) * multiplier, nil
 }
