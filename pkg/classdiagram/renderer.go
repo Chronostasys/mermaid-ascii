@@ -8,6 +8,11 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+const (
+	minClassWidth = 10
+	cellPadding   = 2 // 1 space on each side
+)
+
 // Render renders a ClassDiagram to a string.
 func Render(cd *ClassDiagram, config *diagram.Config) (string, error) {
 	if cd == nil || len(cd.Classes) == 0 {
@@ -60,16 +65,16 @@ func Render(cd *ClassDiagram, config *diagram.Config) (string, error) {
 
 func renderClassBox(cls *Class, chars canvas.BoxChars) ([]string, int) {
 	// Calculate width: max of class name and all members
-	width := len(cls.Name) + 2 // 1 space padding on each side
+	width := len(cls.Name) + cellPadding // 1 space padding on each side
 	for _, m := range cls.Members {
 		mStr := formatMember(m)
-		mw := len(mStr) + 2
+		mw := len(mStr) + cellPadding
 		if mw > width {
 			width = mw
 		}
 	}
-	if width < 10 {
-		width = 10
+	if width < minClassWidth {
+		width = minClassWidth
 	}
 
 	var lines []string

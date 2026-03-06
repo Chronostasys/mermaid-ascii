@@ -8,6 +8,11 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+const (
+	minEntityWidth = 12
+	cellPadding    = 2 // 1 space on each side
+)
+
 // Render renders an ERDiagram to a string.
 func Render(erd *ERDiagram, config *diagram.Config) (string, error) {
 	if erd == nil || len(erd.Entities) == 0 {
@@ -44,16 +49,16 @@ func Render(erd *ERDiagram, config *diagram.Config) (string, error) {
 
 func renderEntityBox(entity *Entity, chars canvas.BoxChars) []string {
 	// Calculate width
-	width := len(entity.Name) + 2 // 1 space padding on each side
+	width := len(entity.Name) + cellPadding // 1 space padding on each side
 	for _, attr := range entity.Attributes {
 		attrStr := formatAttribute(attr)
-		aw := len(attrStr) + 2
+		aw := len(attrStr) + cellPadding
 		if aw > width {
 			width = aw
 		}
 	}
-	if width < 12 {
-		width = 12
+	if width < minEntityWidth {
+		width = minEntityWidth
 	}
 
 	var lines []string

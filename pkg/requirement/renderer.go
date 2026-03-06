@@ -8,6 +8,10 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+const (
+	boxPadding = 4 // 2 padding on each side
+)
+
 type reqChars struct {
 	canvas.BoxChars
 	Arrow string
@@ -99,7 +103,7 @@ func renderBox(contentLines []string, chars reqChars) []string {
 			maxWidth = len(l)
 		}
 	}
-	boxWidth := maxWidth + 4
+	boxWidth := maxWidth + boxPadding
 
 	var result []string
 	result = append(result, chars.TopBorder(boxWidth))

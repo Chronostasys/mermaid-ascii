@@ -8,6 +8,10 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+const (
+	boxPadding = 4 // 2 padding on each side
+)
+
 // Render renders a C4 diagram as ASCII/Unicode text.
 func Render(d *C4Diagram, config *diagram.Config) (string, error) {
 	if d == nil {
@@ -70,7 +74,7 @@ func renderElement(elem *Element, chars canvas.BoxChars, indent int) []string {
 			maxWidth = len(cl)
 		}
 	}
-	boxWidth := maxWidth + 4 // 2 padding on each side
+	boxWidth := maxWidth + boxPadding // 2 padding on each side
 
 	var result []string
 	result = append(result, prefix+chars.TopBorder(boxWidth))
@@ -93,7 +97,7 @@ func renderBoundary(b *Boundary, chars canvas.BoxChars, indent int) []string {
 	}
 
 	// Find max width
-	maxWidth := len(b.Label) + 4
+	maxWidth := len(b.Label) + boxPadding
 	for _, l := range inner {
 		trimmed := strings.TrimPrefix(l, prefix)
 		if len(trimmed)+2 > maxWidth {

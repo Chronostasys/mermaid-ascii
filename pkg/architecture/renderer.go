@@ -8,6 +8,10 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+const (
+	boxPadding = 4 // 2 padding on each side
+)
+
 type archChars struct {
 	canvas.BoxChars
 	Arrow string
@@ -61,7 +65,7 @@ func Render(d *ArchitectureDiagram, config *diagram.Config) (string, error) {
 func renderService(svc *Service, chars archChars, indent int) []string {
 	prefix := strings.Repeat("  ", indent)
 	label := svc.Label
-	boxWidth := len(label) + 4
+	boxWidth := len(label) + boxPadding
 
 	var result []string
 	result = append(result, prefix+chars.TopBorder(boxWidth))
@@ -81,7 +85,7 @@ func renderGroup(g *Group, chars archChars, indent int) []string {
 		inner = append(inner, renderGroup(sub, chars, indent+1)...)
 	}
 
-	maxWidth := len(g.Label) + 4
+	maxWidth := len(g.Label) + boxPadding
 	for _, l := range inner {
 		stripped := strings.TrimPrefix(l, prefix)
 		if len(stripped)+2 > maxWidth {

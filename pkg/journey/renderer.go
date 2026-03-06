@@ -8,8 +8,10 @@ import (
 )
 
 const (
-	maxScore    = 5
-	barMaxWidth = 20
+	maxScore         = 5
+	barMaxWidth      = 20
+	nameWidthPadding = 2
+	scoreColumnWidth = 7
 )
 
 // Render renders a JourneyDiagram as a formatted table string using Unicode or ASCII characters.
@@ -49,7 +51,7 @@ func Render(jd *JourneyDiagram, config *diagram.Config) (string, error) {
 			maxNameLen = len(section.Name)
 		}
 	}
-	nameWidth := maxNameLen + 2
+	nameWidth := maxNameLen + nameWidthPadding
 
 	var lines []string
 
@@ -67,7 +69,7 @@ func Render(jd *JourneyDiagram, config *diagram.Config) (string, error) {
 	// Header
 	header := padRight("Task", nameWidth) + vChar + " Score " + vChar + " Satisfaction"
 	lines = append(lines, header)
-	sep := strings.Repeat(hChar, nameWidth) + crossChar + strings.Repeat(hChar, 7) + crossChar + strings.Repeat(hChar, barMaxWidth+2)
+	sep := strings.Repeat(hChar, nameWidth) + crossChar + strings.Repeat(hChar, scoreColumnWidth) + crossChar + strings.Repeat(hChar, barMaxWidth+2)
 	lines = append(lines, sep)
 
 	for _, section := range jd.Sections {

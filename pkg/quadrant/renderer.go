@@ -8,8 +8,10 @@ import (
 )
 
 const (
-	gridWidth  = 40
-	gridHeight = 20
+	gridWidth    = 40
+	gridHeight   = 20
+	titlePadding = 10
+	minYAxisWidth = 6
 )
 
 // Render renders a QuadrantChart as a formatted grid string using Unicode or ASCII characters.
@@ -40,7 +42,7 @@ func Render(qc *QuadrantChart, config *diagram.Config) (string, error) {
 
 	// Title
 	if qc.Title != "" {
-		pad := (gridWidth + 10 - len(qc.Title)) / 2
+		pad := (gridWidth + titlePadding - len(qc.Title)) / 2
 		if pad < 0 {
 			pad = 0
 		}
@@ -50,8 +52,8 @@ func Render(qc *QuadrantChart, config *diagram.Config) (string, error) {
 
 	// Build the grid
 	yAxisWidth := maxLen(qc.YAxisTop, qc.YAxisBottom) + 2
-	if yAxisWidth < 6 {
-		yAxisWidth = 6
+	if yAxisWidth < minYAxisWidth {
+		yAxisWidth = minYAxisWidth
 	}
 
 	// Create grid canvas

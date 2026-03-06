@@ -26,6 +26,12 @@ var asciiChars = stateChars{
 	arrowBody: "|",
 }
 
+const (
+	minStateBoxWidth = 12
+	stateBoxPadding  = 4 // 2 padding + 2 border
+	borderWidth      = 2
+)
+
 // Render renders a StateDiagram to a string.
 func Render(sd *StateDiagram, config *diagram.Config) (string, error) {
 	if sd == nil || len(sd.States) == 0 {
@@ -56,15 +62,15 @@ func Render(sd *StateDiagram, config *diagram.Config) (string, error) {
 	maxWidth := 0
 	for _, s := range ordered {
 		label := stateLabel(s)
-		w := len(label) + 4 // 2 padding + 2 border
+		w := len(label) + stateBoxPadding // 2 padding + 2 border
 		if w > maxWidth {
 			maxWidth = w
 		}
 	}
-	if maxWidth < 12 {
-		maxWidth = 12
+	if maxWidth < minStateBoxWidth {
+		maxWidth = minStateBoxWidth
 	}
-	innerWidth := maxWidth - 2 // without border chars
+	innerWidth := maxWidth - borderWidth // without border chars
 
 	// Find transitions by "from" for labeling
 	transFromMap := make(map[string][]*Transition)

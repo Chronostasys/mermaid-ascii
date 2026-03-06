@@ -11,6 +11,9 @@ import (
 const (
 	defaultChartWidth   = 60
 	defaultLabelWidth   = 20
+	minLabelWidth       = 10
+	labelPadding        = 2
+	numDateMarkers      = 5
 	barFillUnicode      = "█"
 	barFillASCII        = "#"
 	barEmptyUnicode     = "░"
@@ -50,7 +53,7 @@ func Render(gd *GanttDiagram, config *diagram.Config) (string, error) {
 	}
 
 	// Calculate label width from longest task/section name
-	labelWidth := 10
+	labelWidth := minLabelWidth
 	for _, task := range gd.Tasks {
 		if len(task.Name) > labelWidth {
 			labelWidth = len(task.Name)
@@ -61,9 +64,9 @@ func Render(gd *GanttDiagram, config *diagram.Config) (string, error) {
 			labelWidth = len(section.Name)
 		}
 	}
-	labelWidth += 2 // padding
+	labelWidth += labelPadding
 	if labelWidth > defaultLabelWidth {
-		labelWidth = defaultLabelWidth + 2
+		labelWidth = defaultLabelWidth + labelPadding
 	}
 
 	chartWidth := defaultChartWidth
@@ -78,7 +81,7 @@ func Render(gd *GanttDiagram, config *diagram.Config) (string, error) {
 
 	// Header with date markers
 	headerLine := strings.Repeat(" ", labelWidth+2)
-	numMarkers := 5
+	numMarkers := numDateMarkers
 	if chartWidth < 20 {
 		numMarkers = 2
 	}

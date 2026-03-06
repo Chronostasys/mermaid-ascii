@@ -7,6 +7,12 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+const (
+	periodPadding  = 2
+	eventBoxPadding = 4
+	minEventWidth  = 10
+)
+
 // Render renders a TimelineDiagram as a formatted string using Unicode or ASCII characters.
 func Render(td *TimelineDiagram, config *diagram.Config) (string, error) {
 	if td == nil || len(td.Events) == 0 {
@@ -59,10 +65,10 @@ func Render(td *TimelineDiagram, config *diagram.Config) (string, error) {
 			}
 		}
 	}
-	periodWidth += 2
-	eventWidth += 4
-	if eventWidth < 10 {
-		eventWidth = 10
+	periodWidth += periodPadding
+	eventWidth += eventBoxPadding
+	if eventWidth < minEventWidth {
+		eventWidth = minEventWidth
 	}
 
 	// Render each event
@@ -87,8 +93,8 @@ func Render(td *TimelineDiagram, config *diagram.Config) (string, error) {
 			// Event box
 			boxWidth := eventWidth
 			for _, e := range event.Events {
-				if len(e)+4 > boxWidth {
-					boxWidth = len(e) + 4
+				if len(e)+eventBoxPadding > boxWidth {
+					boxWidth = len(e) + eventBoxPadding
 				}
 			}
 

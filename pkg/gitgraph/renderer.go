@@ -7,6 +7,11 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+const (
+	laneWidth        = 4
+	commitLineBuffer = 50
+)
+
 // Render renders a GitGraph as a formatted string using Unicode or ASCII characters.
 func Render(gg *GitGraph, config *diagram.Config) (string, error) {
 	if gg == nil || len(gg.Commits) == 0 {
@@ -46,7 +51,6 @@ func Render(gg *GitGraph, config *diagram.Config) (string, error) {
 		}
 	}
 	numLanes := maxLane + 1
-	laneWidth := 4
 
 	// Track which lanes are active at each commit
 	activeLanes := make(map[int]bool)
@@ -134,7 +138,7 @@ func Render(gg *GitGraph, config *diagram.Config) (string, error) {
 		}
 
 		// Draw commit line
-		commitLine := make([]rune, numLanes*laneWidth+50)
+		commitLine := make([]rune, numLanes*laneWidth+commitLineBuffer)
 		for j := range commitLine {
 			commitLine[j] = ' '
 		}
