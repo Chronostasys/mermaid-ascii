@@ -1,0 +1,26 @@
+sequenceDiagram
+    participant A
+    participant B
+    alt Success
+        A->>B: OK
+    else Failure
+        A->>B: Error
+    end
+---
++---+     +---+
+| A |     | B |
++-+-+     +-+-+
+  |         |
+ +-----------+
+ ||alt Success
+ ||.........||
+ ||         ||
+ || OK      ||
+ |+-------->||
+ ||.........||
+ ||Failure  ||
+ ||         ||
+ || Error   ||
+ |+-------->||
+ +-----------+
+  |         |

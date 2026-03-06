@@ -1,0 +1,119 @@
+package requirement
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/AlexanderGrooff/mermaid-ascii/pkg/diagram"
+)
+
+// BoxChars holds the characters used for rendering.
+type BoxChars struct {
+	TopLeft     rune
+	TopRight    rune
+	BottomLeft  rune
+	BottomRight rune
+	Horizontal  rune
+	Vertical    rune
+	Arrow       string
+}
+
+var asciiChars = BoxChars{'+', '+', '+', '+', '-', '|', "-->"}
+var unicodeChars = BoxChars{'┌', '┐', '└', '┘', '─', '│', "──>"}
+
+// Render renders a requirement diagram as ASCII/Unicode text.
+func Render(d *RequirementDiagram, config *diagram.Config) (string, error) {
+	if d == nil {
+		return "", fmt.Errorf("nil diagram")
+	}
+	if config == nil {
+		config = diagram.DefaultConfig()
+	}
+
+	chars := unicodeChars
+	if config.UseAscii {
+		chars = asciiChars
+	}
+
+	var lines []string
+
+	// Render requirements
+	for _, req := range d.Requirements {
+		lines = append(lines, renderRequirement(req, chars)...)
+		lines = append(lines, "")
+	}
+
+	// Render elements
+	for _, elem := range d.Elements {
+		lines = append(lines, renderReqElement(elem, chars)...)
+		lines = append(lines, "")
+	}
+
+	// Render relationships
+	for _, rel := range d.Relationships {
+		lines = append(lines, fmt.Sprintf("%s %s %s %s", rel.Source, chars.Arrow, rel.Target, fmt.Sprintf("[%s]", rel.Type)))
+	}
+
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	return strings.Join(lines, "\n") + "\n", nil
+}
+
+func renderRequirement(req *Requirement, chars BoxChars) []string {
+	contentLines := []string{
+		fmt.Sprintf("<<%s>>", req.Type),
+		req.Name,
+	}
+	if req.ID != "" {
+		contentLines = append(contentLines, fmt.Sprintf("Id: %s", req.ID))
+	}
+	if req.Text != "" {
+		contentLines = append(contentLines, fmt.Sprintf("Text: %s", req.Text))
+	}
+	if req.Risk != "" {
+		contentLines = append(contentLines, fmt.Sprintf("Risk: %s", req.Risk))
+	}
+	if req.VerifyMethod != "" {
+		contentLines = append(contentLines, fmt.Sprintf("Verify: %s", req.VerifyMethod))
+	}
+
+	return renderBox(contentLines, chars)
+}
+
+func renderReqElement(elem *ReqElement, chars BoxChars) []string {
+	contentLines := []string{
+		"<<element>>",
+		elem.Name,
+	}
+	if elem.Type != "" {
+		contentLines = append(contentLines, fmt.Sprintf("Type: %s", elem.Type))
+	}
+	if elem.DocRef != "" {
+		contentLines = append(contentLines, fmt.Sprintf("DocRef: %s", elem.DocRef))
+	}
+
+	return renderBox(contentLines, chars)
+}
+
+func renderBox(contentLines []string, chars BoxChars) []string {
+	maxWidth := 0
+	for _, l := range contentLines {
+		if len(l) > maxWidth {
+			maxWidth = len(l)
+		}
+	}
+	boxWidth := maxWidth + 4
+
+	var result []string
+	result = append(result, string(chars.TopLeft)+strings.Repeat(string(chars.Horizontal), boxWidth)+string(chars.TopRight))
+	for _, l := range contentLines {
+		pad := boxWidth - len(l)
+		left := pad / 2
+		right := pad - left
+		result = append(result, string(chars.Vertical)+strings.Repeat(" ", left)+l+strings.Repeat(" ", right)+string(chars.Vertical))
+	}
+	result = append(result, string(chars.BottomLeft)+strings.Repeat(string(chars.Horizontal), boxWidth)+string(chars.BottomRight))
+	return result
+}

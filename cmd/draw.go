@@ -55,111 +55,96 @@ func (d *drawing) drawText(start drawingCoord, text string) {
 	}
 }
 
+// lineChars returns the horizontal and vertical line characters for the given edge type.
+func lineChars(edgeType EdgeType, useAscii bool) (hChar, vChar, diagFwd, diagBack string) {
+	if useAscii {
+		switch edgeType {
+		case DottedArrow, DottedLine:
+			return ".", ".", "/", "\\"
+		case ThickArrow, ThickLine:
+			return "=", "|", "/", "\\"
+		default:
+			return "-", "|", "/", "\\"
+		}
+	}
+	switch edgeType {
+	case DottedArrow, DottedLine:
+		return "┈", "┊", "╱", "╲"
+	case ThickArrow, ThickLine:
+		return "═", "║", "╱", "╲"
+	default:
+		return "─", "│", "╱", "╲"
+	}
+}
+
 func (g *graph) drawLine(d *drawing, from drawingCoord, to drawingCoord, offsetFrom int, offsetTo int) []drawingCoord {
+	return g.drawLineWithType(d, from, to, offsetFrom, offsetTo, SolidArrow)
+}
+
+func (g *graph) drawLineWithType(d *drawing, from drawingCoord, to drawingCoord, offsetFrom int, offsetTo int, edgeType EdgeType) []drawingCoord {
 	// Offset determines how far from the actual coord the line should start/stop.
 	direction := determineDirection(genericCoord(from), genericCoord(to))
 	drawnCoords := make([]drawingCoord, 0)
+	hChar, vChar, diagFwd, diagBack := lineChars(edgeType, g.useAscii)
 	log.Debug("Drawing line from ", from, " to ", to, " direction: ", direction, " offsetFrom: ", offsetFrom, " offsetTo: ", offsetTo)
-	if !g.useAscii {
-		switch direction {
-		case Up:
-			for y := from.y - offsetFrom; y >= to.y-offsetTo; y-- {
-				drawnCoords = append(drawnCoords, drawingCoord{from.x, y})
-				(*d)[from.x][y] = "│"
-			}
-		case Down:
-			for y := from.y + offsetFrom; y <= to.y+offsetTo; y++ {
-				drawnCoords = append(drawnCoords, drawingCoord{from.x, y})
-				(*d)[from.x][y] = "│"
-			}
-		case Left:
-			for x := from.x - offsetFrom; x >= to.x-offsetTo; x-- {
-				drawnCoords = append(drawnCoords, drawingCoord{x, from.y})
-				(*d)[x][from.y] = "─"
-			}
-		case Right:
-			for x := from.x + offsetFrom; x <= to.x+offsetTo; x++ {
-				drawnCoords = append(drawnCoords, drawingCoord{x, from.y})
-				(*d)[x][from.y] = "─"
-			}
-		case UpperLeft:
-			for x, y := from.x, from.y-offsetFrom; x >= to.x-offsetTo && y >= to.y-offsetTo; x, y = x-1, y-1 {
-				drawnCoords = append(drawnCoords, drawingCoord{x, y})
-				(*d)[x][y] = "╲"
-			}
-		case UpperRight:
-			for x, y := from.x, from.y-offsetFrom; x <= to.x+offsetTo && y >= to.y-offsetTo; x, y = x+1, y-1 {
-				drawnCoords = append(drawnCoords, drawingCoord{x, y})
-				(*d)[x][y] = "╱"
-			}
-		case LowerLeft:
-			for x, y := from.x, from.y+offsetFrom; x >= to.x-offsetTo && y <= to.y+offsetTo; x, y = x-1, y+1 {
-				drawnCoords = append(drawnCoords, drawingCoord{x, y})
-				(*d)[x][y] = "╱"
-			}
-		case LowerRight:
-			for x, y := from.x, from.y+offsetFrom; x <= to.x+offsetTo && y <= to.y+offsetTo; x, y = x+1, y+1 {
-				drawnCoords = append(drawnCoords, drawingCoord{x, y})
-				(*d)[x][y] = "╲"
-			}
+	switch direction {
+	case Up:
+		for y := from.y - offsetFrom; y >= to.y-offsetTo; y-- {
+			drawnCoords = append(drawnCoords, drawingCoord{from.x, y})
+			(*d)[from.x][y] = vChar
 		}
-	} else {
-		switch direction {
-		case Up:
-			for y := from.y - offsetFrom; y >= to.y-offsetTo; y-- {
-				drawnCoords = append(drawnCoords, drawingCoord{from.x, y})
-				(*d)[from.x][y] = "|"
-			}
-		case Down:
-			for y := from.y + offsetFrom; y <= to.y+offsetTo; y++ {
-				drawnCoords = append(drawnCoords, drawingCoord{from.x, y})
-				(*d)[from.x][y] = "|"
-			}
-		case Left:
-			for x := from.x - offsetFrom; x >= to.x-offsetTo; x-- {
-				drawnCoords = append(drawnCoords, drawingCoord{x, from.y})
-				(*d)[x][from.y] = "-"
-			}
-		case Right:
-			for x := from.x + offsetFrom; x <= to.x+offsetTo; x++ {
-				drawnCoords = append(drawnCoords, drawingCoord{x, from.y})
-				(*d)[x][from.y] = "-"
-			}
-		case UpperLeft:
-			for x, y := from.x, from.y-offsetFrom; x >= to.x-offsetTo && y >= to.y-offsetTo; x, y = x-1, y-1 {
-				drawnCoords = append(drawnCoords, drawingCoord{x, y})
-				(*d)[x][y] = "\\"
-			}
-		case UpperRight:
-			for x, y := from.x, from.y-offsetFrom; x <= to.x+offsetTo && y >= to.y-offsetTo; x, y = x+1, y-1 {
-				drawnCoords = append(drawnCoords, drawingCoord{x, y})
-				(*d)[x][y] = "/"
-			}
-		case LowerLeft:
-			for x, y := from.x, from.y+offsetFrom; x >= to.x-offsetTo && y <= to.y+offsetTo; x, y = x-1, y+1 {
-				drawnCoords = append(drawnCoords, drawingCoord{x, y})
-				(*d)[x][y] = "/"
-			}
-		case LowerRight:
-			for x, y := from.x, from.y+offsetFrom; x <= to.x+offsetTo && y <= to.y+offsetTo; x, y = x+1, y+1 {
-				drawnCoords = append(drawnCoords, drawingCoord{x, y})
-				(*d)[x][y] = "\\"
-			}
+	case Down:
+		for y := from.y + offsetFrom; y <= to.y+offsetTo; y++ {
+			drawnCoords = append(drawnCoords, drawingCoord{from.x, y})
+			(*d)[from.x][y] = vChar
+		}
+	case Left:
+		for x := from.x - offsetFrom; x >= to.x-offsetTo; x-- {
+			drawnCoords = append(drawnCoords, drawingCoord{x, from.y})
+			(*d)[x][from.y] = hChar
+		}
+	case Right:
+		for x := from.x + offsetFrom; x <= to.x+offsetTo; x++ {
+			drawnCoords = append(drawnCoords, drawingCoord{x, from.y})
+			(*d)[x][from.y] = hChar
+		}
+	case UpperLeft:
+		for x, y := from.x, from.y-offsetFrom; x >= to.x-offsetTo && y >= to.y-offsetTo; x, y = x-1, y-1 {
+			drawnCoords = append(drawnCoords, drawingCoord{x, y})
+			(*d)[x][y] = diagBack
+		}
+	case UpperRight:
+		for x, y := from.x, from.y-offsetFrom; x <= to.x+offsetTo && y >= to.y-offsetTo; x, y = x+1, y-1 {
+			drawnCoords = append(drawnCoords, drawingCoord{x, y})
+			(*d)[x][y] = diagFwd
+		}
+	case LowerLeft:
+		for x, y := from.x, from.y+offsetFrom; x >= to.x-offsetTo && y <= to.y+offsetTo; x, y = x-1, y+1 {
+			drawnCoords = append(drawnCoords, drawingCoord{x, y})
+			(*d)[x][y] = diagFwd
+		}
+	case LowerRight:
+		for x, y := from.x, from.y+offsetFrom; x <= to.x+offsetTo && y <= to.y+offsetTo; x, y = x+1, y+1 {
+			drawnCoords = append(drawnCoords, drawingCoord{x, y})
+			(*d)[x][y] = diagBack
 		}
 	}
 	return drawnCoords
 }
 
 func drawMap(properties *graphProperties) string {
-	g := mkGraph(properties.data)
+	g := mkGraph(properties.data, properties.nodeInfo)
 	g.setStyleClasses(properties)
 	g.paddingX = properties.paddingX
 	g.paddingY = properties.paddingY
 	g.useAscii = properties.useAscii
+	g.graphDirection = properties.graphDirection
+	g.boxBorderPadding = properties.boxBorderPadding
+	g.showCoords = properties.showCoords
 	g.setSubgraphs(properties.subgraphs)
 	g.createMapping()
 	d := g.draw()
-	if Coords {
+	if g.showCoords {
 		d = d.debugDrawingWrapper()
 		d = d.debugCoordWrapper(g)
 	}
@@ -167,8 +152,8 @@ func drawMap(properties *graphProperties) string {
 	return s
 }
 
-func drawBox(n *node, g graph) *drawing {
-	// Box is always 3x3 on the grid
+// getNodeDimensions returns the width and height for a node's drawing area.
+func getNodeDimensions(n *node, g graph) (int, int) {
 	w := 0
 	for i := 0; i < 2; i++ {
 		w += g.columnWidth[n.gridCoord.x+i]
@@ -177,63 +162,411 @@ func drawBox(n *node, g graph) *drawing {
 	for i := 0; i < 2; i++ {
 		h += g.rowHeight[n.gridCoord.y+i]
 	}
+	return w, h
+}
 
+// drawNodeText draws the node's display name centered in the drawing.
+func drawNodeText(d *drawing, n *node, g graph, w, h int) {
+	textY := h / 2
+	textX := w/2 - CeilDiv(len(n.name), 2) + 1
+	for x := 0; x < len(n.name); x++ {
+		(*d)[textX+x][textY] = wrapTextInColor(string(n.name[x]), n.styleClass.styles["color"], g.styleType)
+	}
+}
+
+// drawShape dispatches to the appropriate shape drawing function based on node shape.
+func drawShape(n *node, g graph) *drawing {
+	switch n.shape {
+	case shapeRounded, shapeStadium:
+		return drawRoundedBox(n, g)
+	case shapeSubroutine:
+		return drawSubroutineBox(n, g)
+	case shapeCylinder:
+		return drawCylinderBox(n, g)
+	case shapeCircle:
+		return drawCircleBox(n, g)
+	case shapeDiamond:
+		return drawDiamondBox(n, g)
+	case shapeHexagon:
+		return drawHexagonBox(n, g)
+	case shapeFlag:
+		return drawFlagBox(n, g)
+	default:
+		return drawRectBox(n, g)
+	}
+}
+
+// drawRectBox draws a standard rectangular box (default shape).
+func drawRectBox(n *node, g graph) *drawing {
+	w, h := getNodeDimensions(n, g)
 	from := drawingCoord{0, 0}
 	to := drawingCoord{w, h}
 	boxDrawing := *(mkDrawing(Max(from.x, to.x), Max(from.y, to.y)))
-	log.Debug("Drawing box from ", from, " to ", to)
+	log.Debug("Drawing rect box from ", from, " to ", to)
 	if !g.useAscii {
-		// Draw top border
 		for x := from.x + 1; x < to.x; x++ {
-			boxDrawing[x][from.y] = "─" // Horizontal line
+			boxDrawing[x][from.y] = "─"
+			boxDrawing[x][to.y] = "─"
 		}
-		// Draw bottom border
-		for x := from.x + 1; x < to.x; x++ {
-			boxDrawing[x][to.y] = "─" // Horizontal line
-		}
-		// Draw left border
 		for y := from.y + 1; y < to.y; y++ {
-			boxDrawing[from.x][y] = "│" // Vertical line
+			boxDrawing[from.x][y] = "│"
+			boxDrawing[to.x][y] = "│"
 		}
-		// Draw right border
-		for y := from.y + 1; y < to.y; y++ {
-			boxDrawing[to.x][y] = "│" // Vertical line
-		}
-		// Draw corners
-		boxDrawing[from.x][from.y] = "┌" // Top left corner
-		boxDrawing[to.x][from.y] = "┐"   // Top right corner
-		boxDrawing[from.x][to.y] = "└"   // Bottom left corner
-		boxDrawing[to.x][to.y] = "┘"     // Bottom right corner
+		boxDrawing[from.x][from.y] = "┌"
+		boxDrawing[to.x][from.y] = "┐"
+		boxDrawing[from.x][to.y] = "└"
+		boxDrawing[to.x][to.y] = "┘"
 	} else {
-		// Draw top border
 		for x := from.x + 1; x < to.x; x++ {
-			boxDrawing[x][from.y] = "-" // Horizontal line
+			boxDrawing[x][from.y] = "-"
+			boxDrawing[x][to.y] = "-"
 		}
-		// Draw bottom border
-		for x := from.x + 1; x < to.x; x++ {
-			boxDrawing[x][to.y] = "-" // Horizontal line
-		}
-		// Draw left border
 		for y := from.y + 1; y < to.y; y++ {
-			boxDrawing[from.x][y] = "|" // Vertical line
+			boxDrawing[from.x][y] = "|"
+			boxDrawing[to.x][y] = "|"
 		}
-		// Draw right border
-		for y := from.y + 1; y < to.y; y++ {
-			boxDrawing[to.x][y] = "|" // Vertical line
-		}
-		// Draw corners
-		boxDrawing[from.x][from.y] = "+" // Top left corner
-		boxDrawing[to.x][from.y] = "+"   // Top right corner
-		boxDrawing[from.x][to.y] = "+"   // Bottom left corner
-		boxDrawing[to.x][to.y] = "+"     // Bottom right corner
+		boxDrawing[from.x][from.y] = "+"
+		boxDrawing[to.x][from.y] = "+"
+		boxDrawing[from.x][to.y] = "+"
+		boxDrawing[to.x][to.y] = "+"
 	}
-	// Draw text
-	textY := from.y + h/2
-	textX := from.x + w/2 - CeilDiv(len(n.name), 2) + 1
-	for x := 0; x < len(n.name); x++ {
-		boxDrawing[textX+x][textY] = wrapTextInColor(string(n.name[x]), n.styleClass.styles["color"], g.styleType)
-	}
+	drawNodeText(&boxDrawing, n, g, w, h)
+	return &boxDrawing
+}
 
+// drawRoundedBox draws a box with rounded corners (for rounded/stadium shapes).
+func drawRoundedBox(n *node, g graph) *drawing {
+	w, h := getNodeDimensions(n, g)
+	from := drawingCoord{0, 0}
+	to := drawingCoord{w, h}
+	boxDrawing := *(mkDrawing(Max(from.x, to.x), Max(from.y, to.y)))
+	log.Debug("Drawing rounded box from ", from, " to ", to)
+	if !g.useAscii {
+		for x := from.x + 1; x < to.x; x++ {
+			boxDrawing[x][from.y] = "─"
+			boxDrawing[x][to.y] = "─"
+		}
+		for y := from.y + 1; y < to.y; y++ {
+			boxDrawing[from.x][y] = "│"
+			boxDrawing[to.x][y] = "│"
+		}
+		boxDrawing[from.x][from.y] = "╭"
+		boxDrawing[to.x][from.y] = "╮"
+		boxDrawing[from.x][to.y] = "╰"
+		boxDrawing[to.x][to.y] = "╯"
+	} else {
+		for x := from.x + 1; x < to.x; x++ {
+			boxDrawing[x][from.y] = "-"
+			boxDrawing[x][to.y] = "-"
+		}
+		for y := from.y + 1; y < to.y; y++ {
+			boxDrawing[from.x][y] = "|"
+			boxDrawing[to.x][y] = "|"
+		}
+		boxDrawing[from.x][from.y] = "("
+		boxDrawing[to.x][from.y] = ")"
+		boxDrawing[from.x][to.y] = "("
+		boxDrawing[to.x][to.y] = ")"
+	}
+	drawNodeText(&boxDrawing, n, g, w, h)
+	return &boxDrawing
+}
+
+// drawSubroutineBox draws a box with double vertical borders.
+func drawSubroutineBox(n *node, g graph) *drawing {
+	w, h := getNodeDimensions(n, g)
+	from := drawingCoord{0, 0}
+	to := drawingCoord{w, h}
+	boxDrawing := *(mkDrawing(Max(from.x, to.x), Max(from.y, to.y)))
+	log.Debug("Drawing subroutine box from ", from, " to ", to)
+	if !g.useAscii {
+		for x := from.x + 1; x < to.x; x++ {
+			boxDrawing[x][from.y] = "─"
+			boxDrawing[x][to.y] = "─"
+		}
+		for y := from.y + 1; y < to.y; y++ {
+			boxDrawing[from.x][y] = "│"
+			boxDrawing[from.x+1][y] = "│"
+			boxDrawing[to.x][y] = "│"
+			boxDrawing[to.x-1][y] = "│"
+		}
+		boxDrawing[from.x][from.y] = "┌"
+		boxDrawing[to.x][from.y] = "┐"
+		boxDrawing[from.x][to.y] = "└"
+		boxDrawing[to.x][to.y] = "┘"
+	} else {
+		for x := from.x + 1; x < to.x; x++ {
+			boxDrawing[x][from.y] = "-"
+			boxDrawing[x][to.y] = "-"
+		}
+		for y := from.y + 1; y < to.y; y++ {
+			boxDrawing[from.x][y] = "|"
+			boxDrawing[from.x+1][y] = "|"
+			boxDrawing[to.x][y] = "|"
+			boxDrawing[to.x-1][y] = "|"
+		}
+		boxDrawing[from.x][from.y] = "+"
+		boxDrawing[to.x][from.y] = "+"
+		boxDrawing[from.x][to.y] = "+"
+		boxDrawing[to.x][to.y] = "+"
+	}
+	drawNodeText(&boxDrawing, n, g, w, h)
+	return &boxDrawing
+}
+
+// drawCylinderBox draws a cylinder shape with curved top/bottom.
+func drawCylinderBox(n *node, g graph) *drawing {
+	w, h := getNodeDimensions(n, g)
+	from := drawingCoord{0, 0}
+	to := drawingCoord{w, h}
+	boxDrawing := *(mkDrawing(Max(from.x, to.x), Max(from.y, to.y)))
+	log.Debug("Drawing cylinder box from ", from, " to ", to)
+	if !g.useAscii {
+		// Top curved border
+		for x := from.x + 1; x < to.x; x++ {
+			boxDrawing[x][from.y] = "─"
+		}
+		// Bottom curved border (double line)
+		for x := from.x + 1; x < to.x; x++ {
+			boxDrawing[x][to.y] = "─"
+			boxDrawing[x][to.y-1] = "─"
+		}
+		// Left border
+		for y := from.y + 1; y < to.y-1; y++ {
+			boxDrawing[from.x][y] = "│"
+		}
+		// Right border
+		for y := from.y + 1; y < to.y-1; y++ {
+			boxDrawing[to.x][y] = "│"
+		}
+		// Top corners
+		boxDrawing[from.x][from.y] = "┌"
+		boxDrawing[to.x][from.y] = "┐"
+		// Bottom double line corners
+		boxDrawing[from.x][to.y-1] = "└"
+		boxDrawing[to.x][to.y-1] = "┘"
+		boxDrawing[from.x][to.y] = "╰"
+		boxDrawing[to.x][to.y] = "╯"
+	} else {
+		for x := from.x + 1; x < to.x; x++ {
+			boxDrawing[x][from.y] = "-"
+			boxDrawing[x][to.y] = "-"
+			boxDrawing[x][to.y-1] = "-"
+		}
+		for y := from.y + 1; y < to.y-1; y++ {
+			boxDrawing[from.x][y] = "|"
+			boxDrawing[to.x][y] = "|"
+		}
+		boxDrawing[from.x][from.y] = "+"
+		boxDrawing[to.x][from.y] = "+"
+		boxDrawing[from.x][to.y-1] = "+"
+		boxDrawing[to.x][to.y-1] = "+"
+		boxDrawing[from.x][to.y] = "("
+		boxDrawing[to.x][to.y] = ")"
+	}
+	drawNodeText(&boxDrawing, n, g, w, h)
+	return &boxDrawing
+}
+
+// drawCircleBox draws a circle/ellipse shape with rounded borders.
+func drawCircleBox(n *node, g graph) *drawing {
+	w, h := getNodeDimensions(n, g)
+	from := drawingCoord{0, 0}
+	to := drawingCoord{w, h}
+	boxDrawing := *(mkDrawing(Max(from.x, to.x), Max(from.y, to.y)))
+	log.Debug("Drawing circle box from ", from, " to ", to)
+	if !g.useAscii {
+		for x := from.x + 2; x <= to.x-2; x++ {
+			boxDrawing[x][from.y] = "─"
+			boxDrawing[x][to.y] = "─"
+		}
+		for y := from.y + 1; y < to.y; y++ {
+			boxDrawing[from.x][y] = "│"
+			boxDrawing[to.x][y] = "│"
+		}
+		// Diagonal corners for circle effect
+		boxDrawing[from.x+1][from.y] = "╱"
+		boxDrawing[to.x-1][from.y] = "╲"
+		boxDrawing[from.x+1][to.y] = "╲"
+		boxDrawing[to.x-1][to.y] = "╱"
+	} else {
+		for x := from.x + 2; x <= to.x-2; x++ {
+			boxDrawing[x][from.y] = "-"
+			boxDrawing[x][to.y] = "-"
+		}
+		for y := from.y + 1; y < to.y; y++ {
+			boxDrawing[from.x][y] = "|"
+			boxDrawing[to.x][y] = "|"
+		}
+		boxDrawing[from.x+1][from.y] = "/"
+		boxDrawing[to.x-1][from.y] = "\\"
+		boxDrawing[from.x+1][to.y] = "\\"
+		boxDrawing[to.x-1][to.y] = "/"
+	}
+	drawNodeText(&boxDrawing, n, g, w, h)
+	return &boxDrawing
+}
+
+// drawDiamondBox draws a diamond/rhombus shape.
+func drawDiamondBox(n *node, g graph) *drawing {
+	w, h := getNodeDimensions(n, g)
+	from := drawingCoord{0, 0}
+	to := drawingCoord{w, h}
+	boxDrawing := *(mkDrawing(Max(from.x, to.x), Max(from.y, to.y)))
+	log.Debug("Drawing diamond box from ", from, " to ", to)
+
+	midX := w / 2
+	midY := h / 2
+
+	if !g.useAscii {
+		// Draw top half: / and \ going from center top to middle edges
+		for dy := 0; dy <= midY; dy++ {
+			leftX := midX - dy
+			rightX := midX + dy
+			if leftX >= from.x && leftX <= to.x {
+				boxDrawing[leftX][from.y+midY-dy] = "╱"
+			}
+			if rightX >= from.x && rightX <= to.x {
+				boxDrawing[rightX][from.y+midY-dy] = "╲"
+			}
+		}
+		// Draw bottom half
+		for dy := 0; dy <= midY; dy++ {
+			leftX := midX - dy
+			rightX := midX + dy
+			if leftX >= from.x && leftX <= to.x {
+				boxDrawing[leftX][from.y+midY+dy] = "╲"
+			}
+			if rightX >= from.x && rightX <= to.x {
+				boxDrawing[rightX][from.y+midY+dy] = "╱"
+			}
+		}
+	} else {
+		// Draw top half
+		for dy := 0; dy <= midY; dy++ {
+			leftX := midX - dy
+			rightX := midX + dy
+			if leftX >= from.x && leftX <= to.x {
+				boxDrawing[leftX][from.y+midY-dy] = "/"
+			}
+			if rightX >= from.x && rightX <= to.x {
+				boxDrawing[rightX][from.y+midY-dy] = "\\"
+			}
+		}
+		// Draw bottom half
+		for dy := 0; dy <= midY; dy++ {
+			leftX := midX - dy
+			rightX := midX + dy
+			if leftX >= from.x && leftX <= to.x {
+				boxDrawing[leftX][from.y+midY+dy] = "\\"
+			}
+			if rightX >= from.x && rightX <= to.x {
+				boxDrawing[rightX][from.y+midY+dy] = "/"
+			}
+		}
+	}
+	drawNodeText(&boxDrawing, n, g, w, h)
+	return &boxDrawing
+}
+
+// drawHexagonBox draws a hexagon shape with angled left/right edges.
+func drawHexagonBox(n *node, g graph) *drawing {
+	w, h := getNodeDimensions(n, g)
+	from := drawingCoord{0, 0}
+	to := drawingCoord{w, h}
+	boxDrawing := *(mkDrawing(Max(from.x, to.x), Max(from.y, to.y)))
+	log.Debug("Drawing hexagon box from ", from, " to ", to)
+
+	midY := h / 2
+
+	if !g.useAscii {
+		// Top/bottom border (between angled edges)
+		for x := from.x + 2; x <= to.x-2; x++ {
+			boxDrawing[x][from.y] = "─"
+			boxDrawing[x][to.y] = "─"
+		}
+		// Left angled edges
+		for dy := 0; dy <= midY; dy++ {
+			boxDrawing[from.x+1-Min(1, dy)][from.y+dy] = "╱"
+			boxDrawing[from.x+1-Min(1, dy)][to.y-dy] = "╲"
+		}
+		// Right angled edges
+		for dy := 0; dy <= midY; dy++ {
+			boxDrawing[to.x-1+Min(1, dy)][from.y+dy] = "╲"
+			boxDrawing[to.x-1+Min(1, dy)][to.y-dy] = "╱"
+		}
+		// Middle vertical sides
+		boxDrawing[from.x][midY] = "│"
+		boxDrawing[to.x][midY] = "│"
+	} else {
+		for x := from.x + 2; x <= to.x-2; x++ {
+			boxDrawing[x][from.y] = "-"
+			boxDrawing[x][to.y] = "-"
+		}
+		for dy := 0; dy <= midY; dy++ {
+			boxDrawing[from.x+1-Min(1, dy)][from.y+dy] = "/"
+			boxDrawing[from.x+1-Min(1, dy)][to.y-dy] = "\\"
+		}
+		for dy := 0; dy <= midY; dy++ {
+			boxDrawing[to.x-1+Min(1, dy)][from.y+dy] = "\\"
+			boxDrawing[to.x-1+Min(1, dy)][to.y-dy] = "/"
+		}
+		boxDrawing[from.x][midY] = "|"
+		boxDrawing[to.x][midY] = "|"
+	}
+	drawNodeText(&boxDrawing, n, g, w, h)
+	return &boxDrawing
+}
+
+// drawFlagBox draws an asymmetric/flag shape with a pointed right side.
+func drawFlagBox(n *node, g graph) *drawing {
+	w, h := getNodeDimensions(n, g)
+	from := drawingCoord{0, 0}
+	to := drawingCoord{w, h}
+	boxDrawing := *(mkDrawing(Max(from.x, to.x), Max(from.y, to.y)))
+	log.Debug("Drawing flag box from ", from, " to ", to)
+
+	midY := h / 2
+
+	if !g.useAscii {
+		// Top border
+		for x := from.x + 1; x < to.x-1; x++ {
+			boxDrawing[x][from.y] = "─"
+		}
+		// Bottom border
+		for x := from.x + 1; x < to.x-1; x++ {
+			boxDrawing[x][to.y] = "─"
+		}
+		// Left border (normal)
+		for y := from.y + 1; y < to.y; y++ {
+			boxDrawing[from.x][y] = "│"
+		}
+		// Left corners
+		boxDrawing[from.x][from.y] = "┌"
+		boxDrawing[from.x][to.y] = "└"
+		// Right pointed side
+		for dy := 1; dy <= midY; dy++ {
+			boxDrawing[to.x-1+Min(1, dy)][from.y+dy] = "╲"
+			boxDrawing[to.x-1+Min(1, dy)][to.y-dy] = "╱"
+		}
+		boxDrawing[to.x-1][from.y] = "╲"
+		boxDrawing[to.x-1][to.y] = "╱"
+		boxDrawing[to.x][midY] = ">"
+	} else {
+		for x := from.x + 1; x < to.x-1; x++ {
+			boxDrawing[x][from.y] = "-"
+			boxDrawing[x][to.y] = "-"
+		}
+		for y := from.y + 1; y < to.y; y++ {
+			boxDrawing[from.x][y] = "|"
+		}
+		boxDrawing[from.x][from.y] = "+"
+		boxDrawing[from.x][to.y] = "+"
+		boxDrawing[to.x-1][from.y] = "\\"
+		boxDrawing[to.x-1][to.y] = "/"
+		boxDrawing[to.x][midY] = ">"
+	}
+	drawNodeText(&boxDrawing, n, g, w, h)
 	return &boxDrawing
 }
 

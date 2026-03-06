@@ -18,6 +18,15 @@ type BoxChars struct {
 	DottedLine   rune
 	SelfTopRight rune
 	SelfBottom   rune
+
+	// Additional arrow type characters (2A)
+	OpenArrowRight rune // > for open (non-filled) arrowhead right
+	OpenArrowLeft  rune // < for open (non-filled) arrowhead left
+	CrossEnd       rune // x for cross end
+
+	// Activation box characters (2B)
+	ActivationLeft  rune
+	ActivationRight rune
 }
 
 var ASCII = BoxChars{
@@ -37,6 +46,13 @@ var ASCII = BoxChars{
 	DottedLine:   '.',
 	SelfTopRight: '+',
 	SelfBottom:   '+',
+
+	OpenArrowRight: '>',
+	OpenArrowLeft:  '<',
+	CrossEnd:       'x',
+
+	ActivationLeft:  '|',
+	ActivationRight: '|',
 }
 
 var Unicode = BoxChars{
@@ -56,4 +72,11 @@ var Unicode = BoxChars{
 	DottedLine:   '┈',
 	SelfTopRight: '┐',
 	SelfBottom:   '┘',
+
+	OpenArrowRight: '>',
+	OpenArrowLeft:  '<',
+	CrossEnd:       '×',
+
+	ActivationLeft:  '│',
+	ActivationRight: '│',
 }

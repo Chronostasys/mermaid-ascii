@@ -1,0 +1,40 @@
+sequenceDiagram
+    participant A
+    participant B
+    A->>B: Solid filled
+    A-->>B: Dotted filled
+    A->B: Solid open
+    A-->B: Dotted open
+    A-xB: Solid cross
+    A--xB: Dotted cross
+    A-)B: Solid async
+    A--)B: Dotted async
+---
++---+     +---+
+| A |     | B |
++-+-+     +-+-+
+  |         |
+  | Solid filled
+  +-------->|
+  |         |
+  | Dotted filled
+  +........>|
+  |         |
+  | Solid open
+  +-------->|
+  |         |
+  | Dotted open
+  +........>|
+  |         |
+  | Solid cross
+  +--------x|
+  |         |
+  | Dotted cross
+  +........x|
+  |         |
+  | Solid async
+  +--------)|
+  |         |
+  | Dotted async
+  +........)|
+  |         |

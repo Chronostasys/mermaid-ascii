@@ -109,12 +109,12 @@ func (g *graph) drawArrow(from gridCoord, to gridCoord, e *edge) (*drawing, *dra
 	if len(e.path) == 0 {
 		return nil, nil, nil, nil, nil
 	}
-	log.Debugf("Drawing arrow from %v to %v with path %v", from, to, e.path)
+	log.Debugf("Drawing arrow from %v to %v with path %v edgeType %v", from, to, e.path, e.edgeType)
 	dLabel := g.drawArrowLabel(e)
-	dPath, linesDrawn, lineDirs := g.drawPath(e.path)
-	dBoxStart := g.drawBoxStart(e.path, linesDrawn[0])
-	dArrowHead := g.drawArrowHead(linesDrawn[len(linesDrawn)-1], lineDirs[len(lineDirs)-1])
-	dCorners := g.drawCorners(e.path)
+	dPath, linesDrawn, lineDirs := g.drawPathWithType(e.path, e.edgeType)
+	dBoxStart := g.drawBoxStartWithType(e.path, linesDrawn[0], e.edgeType)
+	dArrowHead := g.drawArrowHeadWithType(linesDrawn[len(linesDrawn)-1], lineDirs[len(lineDirs)-1], e.edgeType)
+	dCorners := g.drawCornersWithType(e.path, e.edgeType)
 	return dPath, dBoxStart, dArrowHead, dCorners, dLabel
 }
 
@@ -146,6 +146,10 @@ func mergePath(path []gridCoord) []gridCoord {
 }
 
 func (g *graph) drawPath(path []gridCoord) (*drawing, [][]drawingCoord, []direction) {
+	return g.drawPathWithType(path, SolidArrow)
+}
+
+func (g *graph) drawPathWithType(path []gridCoord, edgeType EdgeType) (*drawing, [][]drawingCoord, []direction) {
 	d := copyCanvas(g.drawing)
 	previousCoord := path[0]
 	linesDrawn := make([][]drawingCoord, 0)
@@ -159,7 +163,7 @@ func (g *graph) drawPath(path []gridCoord) (*drawing, [][]drawingCoord, []direct
 			continue
 		}
 		dir := determineDirection(genericCoord(previousCoord), genericCoord(nextCoord))
-		s := g.drawLine(d, previousDrawingCoord, nextDrawingCoord, 1, -1)
+		s := g.drawLineWithType(d, previousDrawingCoord, nextDrawingCoord, 1, -1, edgeType)
 		if len(s) == 0 {
 			// drawLine may return no coords if offsets collapse the line. Use at least one point so arrow and junction logic
 			// can still infer a direction.
@@ -173,12 +177,46 @@ func (g *graph) drawPath(path []gridCoord) (*drawing, [][]drawingCoord, []direct
 }
 
 func (g *graph) drawBoxStart(path []gridCoord, firstLine []drawingCoord) *drawing {
+	return g.drawBoxStartWithType(path, firstLine, SolidArrow)
+}
+
+func (g *graph) drawBoxStartWithType(path []gridCoord, firstLine []drawingCoord, edgeType EdgeType) *drawing {
 	d := *(copyCanvas(g.drawing))
 	from := firstLine[0]
 	dir := determineDirection(genericCoord(path[0]), genericCoord(path[1]))
-	log.Debugf("Drawing box start at %v with direction %v for line %v", from, dir, path)
+	log.Debugf("Drawing box start at %v with direction %v for line %v edgeType %v", from, dir, path, edgeType)
 
 	if g.useAscii {
+		// For bidirectional arrows in ASCII mode, draw arrowhead at start
+		if edgeType == BidirectionalArrow {
+			oppositeDir := dir.getOpposite()
+			switch oppositeDir {
+			case Up:
+				d[from.x][from.y] = "^"
+			case Down:
+				d[from.x][from.y] = "v"
+			case Left:
+				d[from.x][from.y] = "<"
+			case Right:
+				d[from.x][from.y] = ">"
+			}
+		}
+		return &d
+	}
+
+	// For bidirectional arrows, draw arrowhead at start instead of box junction
+	if edgeType == BidirectionalArrow {
+		oppositeDir := dir.getOpposite()
+		switch oppositeDir {
+		case Up:
+			d[from.x][from.y] = "▲"
+		case Down:
+			d[from.x][from.y] = "▼"
+		case Left:
+			d[from.x][from.y] = "◄"
+		case Right:
+			d[from.x][from.y] = "►"
+		}
 		return &d
 	}
 
@@ -196,6 +234,10 @@ func (g *graph) drawBoxStart(path []gridCoord, firstLine []drawingCoord) *drawin
 }
 
 func (g *graph) drawArrowHead(line []drawingCoord, fallback direction) *drawing {
+	return g.drawArrowHeadWithType(line, fallback, SolidArrow)
+}
+
+func (g *graph) drawArrowHeadWithType(line []drawingCoord, fallback direction, edgeType EdgeType) *drawing {
 	d := *(copyCanvas(g.drawing))
 	if len(line) == 0 {
 		return &d
@@ -207,8 +249,25 @@ func (g *graph) drawArrowHead(line []drawingCoord, fallback direction) *drawing 
 		dir = fallback
 	}
 
+	// For edge types with no arrowhead, don't draw anything
+	if edgeType == SolidLine || edgeType == DottedLine || edgeType == ThickLine {
+		return &d
+	}
+
 	var char string
-	if !g.useAscii {
+	if edgeType == CrossEnd {
+		if !g.useAscii {
+			char = "×"
+		} else {
+			char = "x"
+		}
+	} else if edgeType == CircleEnd {
+		if !g.useAscii {
+			char = "●"
+		} else {
+			char = "o"
+		}
+	} else if !g.useAscii {
 		switch dir {
 		case Up:
 			char = "▲"
@@ -276,6 +335,23 @@ func (g *graph) drawArrowHead(line []drawingCoord, fallback direction) *drawing 
 
 	d[lastPos.x][lastPos.y] = char
 	return &d
+}
+
+func (g *graph) drawCornersWithType(path []gridCoord, edgeType EdgeType) *drawing {
+	// For dotted and thick edges, we use "+" for corners since there are no
+	// specialized Unicode corner chars for those line styles.
+	if edgeType == DottedArrow || edgeType == DottedLine || edgeType == ThickArrow || edgeType == ThickLine {
+		d := copyCanvas(g.drawing)
+		for idx, coord := range path {
+			if idx == 0 || idx == len(path)-1 {
+				continue
+			}
+			drawingCoord := g.gridToDrawingCoord(coord, nil)
+			(*d)[drawingCoord.x][drawingCoord.y] = "+"
+		}
+		return d
+	}
+	return g.drawCorners(path)
 }
 
 func (g *graph) drawCorners(path []gridCoord) *drawing {

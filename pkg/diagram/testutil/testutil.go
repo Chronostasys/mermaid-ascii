@@ -101,7 +101,7 @@ func ReadSequenceTestCase(filePath string) (*TestCase, error) {
 
 	return &TestCase{
 		Mermaid:  strings.TrimSpace(parts[0]),
-		Expected: strings.TrimSpace(parts[1]),
+		Expected: strings.Trim(parts[1], "\n\r"),
 		PaddingX: 5,
 		PaddingY: 5,
 	}, nil

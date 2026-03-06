@@ -93,21 +93,23 @@ func setupRouter() *gin.Engine {
 func renderMermaid(c *gin.Context) {
 	mermaidString := c.PostForm("mermaid")
 	// Parse xPadding and yPadding as integers
-	xPadding := c.PostForm("xPadding")
-	if xPadding != "" {
-		if padding, err := strconv.Atoi(xPadding); err == nil {
-			paddingBetweenX = padding
+	xPaddingStr := c.PostForm("xPadding")
+	pX := cliPaddingBetweenX
+	if xPaddingStr != "" {
+		if padding, err := strconv.Atoi(xPaddingStr); err == nil {
+			pX = padding
 		} else {
-			log.Warnf("Invalid xPadding value: %s", xPadding)
+			log.Warnf("Invalid xPadding value: %s", xPaddingStr)
 		}
 	}
 
-	yPadding := c.PostForm("yPadding")
-	if yPadding != "" {
-		if padding, err := strconv.Atoi(yPadding); err == nil {
-			paddingBetweenY = padding
+	yPaddingStr := c.PostForm("yPadding")
+	pY := cliPaddingBetweenY
+	if yPaddingStr != "" {
+		if padding, err := strconv.Atoi(yPaddingStr); err == nil {
+			pY = padding
 		} else {
-			log.Warnf("Invalid yPadding value: %s", yPadding)
+			log.Warnf("Invalid yPadding value: %s", yPaddingStr)
 		}
 	}
 	useExtendedCharsData := c.PostForm("useExtendedChars")
@@ -115,7 +117,7 @@ func renderMermaid(c *gin.Context) {
 	log.Debugf("Received input %s", c.Request.PostForm.Encode())
 
 	// Create a cache key using the input parameters
-	cacheKey := mermaidString + "x" + xPadding + "y" + yPadding + "e" + useExtendedCharsData
+	cacheKey := mermaidString + "x" + xPaddingStr + "y" + yPaddingStr + "e" + useExtendedCharsData
 
 	// Check if the result is already in the cache
 	resultCache.RLock()
@@ -131,9 +133,9 @@ func renderMermaid(c *gin.Context) {
 	// Create render configuration
 	config, err := diagram.NewWebConfig(
 		useAsciiMode,
-		boxBorderPadding,
-		paddingBetweenX,
-		paddingBetweenY,
+		cliBoxBorderPadding,
+		pX,
+		pY,
 	)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid configuration: %v", err)})

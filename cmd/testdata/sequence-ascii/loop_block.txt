@@ -1,0 +1,23 @@
+sequenceDiagram
+    participant A
+    participant B
+    loop Every minute
+        A->>B: Ping
+        B-->>A: Pong
+    end
+---
++---+     +---+
+| A |     | B |
++-+-+     +-+-+
+  |         |
+ +-----------+
+ ||loop Every minute
+ ||.........||
+ ||         ||
+ || Ping    ||
+ |+-------->||
+ ||         ||
+ || Pong    ||
+ ||<........+|
+ +-----------+
+  |         |

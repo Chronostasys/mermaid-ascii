@@ -1,0 +1,17 @@
+sequenceDiagram
+    actor User
+    participant Server
+    User->>Server: Request
+    Server-->>User: Response
+---
+    O        ┌────────┐
+   /|\       │ Server │
+   / \       └────┬───┘
+  User            │
+    │             │
+    │ Request     │
+    ├────────────►│
+    │             │
+    │ Response    │
+    │◄┈┈┈┈┈┈┈┈┈┈┈┈┤
+    │             │

@@ -10,14 +10,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Global flags
+// Global flags (CLI only - not used during rendering)
 var Verbose bool
-var Coords bool
-var boxBorderPadding = 1
-var paddingBetweenX = 5
-var paddingBetweenY = 5
-var graphDirection = "LR"
-var useAscii = false
+var cliCoords bool
+var cliBoxBorderPadding = 1
+var cliPaddingBetweenX = 5
+var cliPaddingBetweenY = 5
+var cliGraphDirection = "LR"
+var cliUseAscii = false
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -52,13 +52,13 @@ var rootCmd = &cobra.Command{
 
 		// Create render configuration from flags
 		config, err := diagram.NewCLIConfig(
-			useAscii,
-			Coords,
+			cliUseAscii,
+			cliCoords,
 			Verbose,
-			boxBorderPadding,
-			paddingBetweenX,
-			paddingBetweenY,
-			graphDirection,
+			cliBoxBorderPadding,
+			cliPaddingBetweenX,
+			cliPaddingBetweenY,
+			cliGraphDirection,
 		)
 		if err != nil {
 			log.Fatalf("Invalid configuration: %v", err)
@@ -88,11 +88,11 @@ func init() {
 	// will be global for your application.
 
 	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "Verbose output")
-	rootCmd.PersistentFlags().BoolVarP(&useAscii, "ascii", "a", false, "Don't use extended character set")
-	rootCmd.PersistentFlags().BoolVarP(&Coords, "coords", "c", false, "Show coordinates")
-	rootCmd.PersistentFlags().IntVarP(&paddingBetweenX, "paddingX", "x", paddingBetweenX, "Horizontal space between nodes")
-	rootCmd.PersistentFlags().IntVarP(&paddingBetweenY, "paddingY", "y", paddingBetweenY, "Vertical space between nodes")
-	rootCmd.PersistentFlags().IntVarP(&boxBorderPadding, "borderPadding", "p", boxBorderPadding, "Padding between text and border")
+	rootCmd.PersistentFlags().BoolVarP(&cliUseAscii, "ascii", "a", false, "Don't use extended character set")
+	rootCmd.PersistentFlags().BoolVarP(&cliCoords, "coords", "c", false, "Show coordinates")
+	rootCmd.PersistentFlags().IntVarP(&cliPaddingBetweenX, "paddingX", "x", cliPaddingBetweenX, "Horizontal space between nodes")
+	rootCmd.PersistentFlags().IntVarP(&cliPaddingBetweenY, "paddingY", "y", cliPaddingBetweenY, "Vertical space between nodes")
+	rootCmd.PersistentFlags().IntVarP(&cliBoxBorderPadding, "borderPadding", "p", cliBoxBorderPadding, "Padding between text and border")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.

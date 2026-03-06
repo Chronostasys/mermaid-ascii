@@ -37,6 +37,15 @@ func TestSequenceDiagramRendering(t *testing.T) {
 		"simple_two_participants.txt",
 		"single_message.txt",
 		"three_participants.txt",
+		"arrow_types.txt",
+		"activation.txt",
+		"activation_explicit.txt",
+		"note_right.txt",
+		"note_over.txt",
+		"note_over_two.txt",
+		"loop_block.txt",
+		"alt_block.txt",
+		"actor_simple.txt",
 	}
 
 	for _, testFile := range testFiles {
@@ -57,6 +66,12 @@ func TestSequenceDiagramRendering_ASCII(t *testing.T) {
 		"self_message.txt",
 		"simple_two_participants.txt",
 		"three_participants.txt",
+		"arrow_types.txt",
+		"activation.txt",
+		"loop_block.txt",
+		"alt_block.txt",
+		"actor_simple.txt",
+		"note_right.txt",
 	}
 
 	for _, testFile := range goldenFiles {
@@ -84,6 +99,15 @@ func TestSequenceDiagramRendering_ASCIISmokeTest(t *testing.T) {
 		"simple_two_participants.txt",
 		"single_message.txt",
 		"three_participants.txt",
+		"arrow_types.txt",
+		"activation.txt",
+		"activation_explicit.txt",
+		"note_right.txt",
+		"note_over.txt",
+		"note_over_two.txt",
+		"loop_block.txt",
+		"alt_block.txt",
+		"actor_simple.txt",
 	}
 
 	for _, testFile := range testFiles {

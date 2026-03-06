@@ -5,7 +5,8 @@ import (
 )
 
 type node struct {
-	name           string
+	id             string // unique identifier (map key, e.g. "A")
+	name           string // display label (e.g. "text" from A[text])
 	drawing        *drawing
 	drawingCoord   *drawingCoord
 	gridCoord      *gridCoord
@@ -13,6 +14,7 @@ type node struct {
 	index          int // Index of the node in the graph.nodes slice
 	styleClassName string
 	styleClass     styleClass
+	shape          nodeShape
 }
 
 func (n node) String() string {
@@ -24,7 +26,7 @@ func (n *node) setCoord(c *drawingCoord) {
 }
 
 func (n *node) setDrawing(g graph) *drawing {
-	d := drawBox(n, g)
+	d := drawShape(n, g)
 	n.drawing = d
 	return d
 }
@@ -36,10 +38,42 @@ func (g *graph) setColumnWidth(n *node) {
 	// - 2x padding
 	// - 2x margin
 	col1 := 1
-	col2 := 2*boxBorderPadding + len(n.name)
+	col2 := 2*g.boxBorderPadding + len(n.name)
 	col3 := 1
+
+	// Shapes that need extra width
+	switch n.shape {
+	case shapeDiamond:
+		// Diamond needs width = height for the diagonal lines.
+		// The text row needs extra horizontal space for the / and \ borders.
+		extraPerSide := 1 + g.boxBorderPadding // space for diagonal + padding
+		col2 += 2 * extraPerSide
+	case shapeHexagon:
+		// Hexagon has angled edges on left/right
+		col2 += 2 * 2 // 2 extra chars per side for the angled edges
+	case shapeSubroutine:
+		// Subroutine has double vertical borders
+		col2 += 2 // extra char on each side
+	case shapeCircle:
+		// Circle needs width >= height for symmetry
+		minTextWidth := 1 + 2*g.boxBorderPadding
+		heightNeeded := 1 + 2*g.boxBorderPadding
+		if col2 < heightNeeded+2 {
+			col2 = minTextWidth + 2
+		}
+	case shapeFlag:
+		// Flag has a pointed left side
+		col2 += 2 // extra space for the point
+	}
+
 	colsToBePlaced := []int{col1, col2, col3}
-	rowsToBePlaced := []int{1, 1 + 2*boxBorderPadding, 1} // Border, padding + line, border
+
+	rowHeight := 1 + 2*g.boxBorderPadding
+	// Diamond needs extra height for the diagonal shape
+	if n.shape == shapeDiamond {
+		rowHeight += 2 // extra rows for top and bottom points
+	}
+	rowsToBePlaced := []int{1, rowHeight, 1} // Border, padding + line, border
 
 	for idx, col := range colsToBePlaced {
 		// Set new width for column if the size increased
@@ -90,7 +124,7 @@ func (g *graph) reserveSpotInGrid(n *node, requestedCoord *gridCoord) *gridCoord
 	if g.grid[*requestedCoord] != nil {
 		log.Debugf("Coord %d,%d is already taken", requestedCoord.x, requestedCoord.y)
 		// Next column is 4 coords further. This is because every node is 3 coords wide + 1 coord inbetween.
-		if graphDirection == "LR" {
+		if g.graphDirection == "LR" {
 			return g.reserveSpotInGrid(n, &gridCoord{x: requestedCoord.x, y: requestedCoord.y + 4})
 		} else {
 			return g.reserveSpotInGrid(n, &gridCoord{x: requestedCoord.x + 4, y: requestedCoord.y})

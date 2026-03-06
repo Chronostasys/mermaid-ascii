@@ -30,20 +30,23 @@ func (g graph) lineToDrawing(line []gridCoord) []drawingCoord {
 }
 
 type graph struct {
-	nodes        []*node
-	edges        []*edge
-	drawing      *drawing
-	grid         map[gridCoord]*node
-	columnWidth  map[int]int
-	rowHeight    map[int]int
-	styleClasses map[string]styleClass
-	styleType    string
-	paddingX     int
-	paddingY     int
-	subgraphs    []*subgraph
-	offsetX      int
-	offsetY      int
-	useAscii     bool
+	nodes           []*node
+	edges           []*edge
+	drawing         *drawing
+	grid            map[gridCoord]*node
+	columnWidth     map[int]int
+	rowHeight       map[int]int
+	styleClasses    map[string]styleClass
+	styleType       string
+	paddingX        int
+	paddingY        int
+	subgraphs       []*subgraph
+	offsetX         int
+	offsetY         int
+	useAscii        bool
+	graphDirection  string
+	boxBorderPadding int
+	showCoords      bool
 }
 
 type subgraph struct {
@@ -58,7 +61,7 @@ type subgraph struct {
 	maxY int
 }
 
-func mkGraph(data *orderedmap.OrderedMap[string, []textEdge]) graph {
+func mkGraph(data *orderedmap.OrderedMap[string, []textEdge], nodeInfo map[string]textNode) graph {
 	g := graph{drawing: mkDrawing(0, 0)}
 	g.grid = make(map[gridCoord]*node)
 	g.columnWidth = make(map[int]int)
@@ -66,24 +69,39 @@ func mkGraph(data *orderedmap.OrderedMap[string, []textEdge]) graph {
 	g.styleClasses = make(map[string]styleClass)
 	index := 0
 	for el := data.Front(); el != nil; el = el.Next() {
-		nodeName := el.Key
+		nodeID := el.Key
 		children := el.Value
 		// Get or create parent node
-		parentNode, err := g.getNode(nodeName)
+		parentNode, err := g.getNode(nodeID)
 		if err != nil {
-			parentNode = &node{name: nodeName, index: index, styleClassName: ""}
+			info, hasInfo := nodeInfo[nodeID]
+			displayName := nodeID
+			var shape nodeShape
+			if hasInfo {
+				displayName = info.name
+				shape = info.shape
+			}
+			parentNode = &node{id: nodeID, name: displayName, index: index, styleClassName: "", shape: shape}
 			g.appendNode(parentNode)
 			index += 1
 		}
 		for _, textEdge := range children {
-			childNode, err := g.getNode(textEdge.child.name)
+			childID := textEdge.child.id
+			childNode, err := g.getNode(childID)
 			if err != nil {
-				childNode = &node{name: textEdge.child.name, index: index, styleClassName: textEdge.child.styleClass}
+				childInfo, hasChildInfo := nodeInfo[childID]
+				childDisplayName := childID
+				var childShape nodeShape
+				if hasChildInfo {
+					childDisplayName = childInfo.name
+					childShape = childInfo.shape
+				}
+				childNode = &node{id: childID, name: childDisplayName, index: index, styleClassName: textEdge.child.styleClass, shape: childShape}
 				parentNode.styleClassName = textEdge.parent.styleClass
 				g.appendNode(childNode)
 				index += 1
 			}
-			e := edge{from: parentNode, to: childNode, text: textEdge.label}
+			e := edge{from: parentNode, to: childNode, text: textEdge.label, edgeType: textEdge.edgeType}
 			g.edges = append(g.edges, &e)
 		}
 	}
@@ -155,6 +173,14 @@ func (g *graph) setSubgraphs(textSubgraphs []*textSubgraph) {
 }
 
 func (g *graph) createMapping() {
+	// For BT/RL, lay out as TD/LR respectively, then flip coordinates at the end
+	actualDirection := g.graphDirection
+	if g.graphDirection == "BT" {
+		g.graphDirection = "TD"
+	} else if g.graphDirection == "RL" {
+		g.graphDirection = "LR"
+	}
+
 	// Set mapping coord for every node in the graph
 	highestPositionPerLevel := []int{}
 	// Init array with 0 values
@@ -168,12 +194,12 @@ func (g *graph) createMapping() {
 	nodesFound := make(map[string]bool)
 	rootNodes := []*node{}
 	for _, n := range g.nodes {
-		if _, ok := nodesFound[n.name]; !ok {
+		if _, ok := nodesFound[n.id]; !ok {
 			rootNodes = append(rootNodes, n)
 		}
-		nodesFound[n.name] = true
+		nodesFound[n.id] = true
 		for _, child := range g.getChildren(n) {
-			nodesFound[child.name] = true
+			nodesFound[child.id] = true
 		}
 	}
 
@@ -194,7 +220,7 @@ func (g *graph) createMapping() {
 
 	// Separate root nodes by whether they're in subgraphs, but only if we have both types
 	// AND there are edges in subgraphs (indicating intentional layout structure)
-	shouldSeparate := graphDirection == "LR" && hasExternalRoots && hasSubgraphRootsWithEdges
+	shouldSeparate := g.graphDirection == "LR" && hasExternalRoots && hasSubgraphRootsWithEdges
 
 	externalRootNodes := []*node{}
 	subgraphRootNodes := []*node{}
@@ -214,7 +240,7 @@ func (g *graph) createMapping() {
 	// Place external root nodes first at level 0
 	for _, n := range externalRootNodes {
 		var mappingCoord *gridCoord
-		if graphDirection == "LR" {
+		if g.graphDirection == "LR" {
 			mappingCoord = g.reserveSpotInGrid(g.nodes[n.index], &gridCoord{x: 0, y: highestPositionPerLevel[0]})
 		} else {
 			mappingCoord = g.reserveSpotInGrid(g.nodes[n.index], &gridCoord{x: highestPositionPerLevel[0], y: 0})
@@ -230,7 +256,7 @@ func (g *graph) createMapping() {
 		subgraphLevel := 4
 		for _, n := range subgraphRootNodes {
 			var mappingCoord *gridCoord
-			if graphDirection == "LR" {
+			if g.graphDirection == "LR" {
 				mappingCoord = g.reserveSpotInGrid(g.nodes[n.index], &gridCoord{x: subgraphLevel, y: highestPositionPerLevel[subgraphLevel]})
 			} else {
 				mappingCoord = g.reserveSpotInGrid(g.nodes[n.index], &gridCoord{x: highestPositionPerLevel[subgraphLevel], y: subgraphLevel})
@@ -245,7 +271,7 @@ func (g *graph) createMapping() {
 		log.Debugf("Creating mapping for node %s at %v", n.name, n.gridCoord)
 		var childLevel int
 		// Next column is 4 coords further. This is because every node is 3 coords wide + 1 coord inbetween.
-		if graphDirection == "LR" {
+		if g.graphDirection == "LR" {
 			childLevel = n.gridCoord.x + 4
 		} else {
 			childLevel = n.gridCoord.y + 4
@@ -258,7 +284,7 @@ func (g *graph) createMapping() {
 			}
 
 			var mappingCoord *gridCoord
-			if graphDirection == "LR" {
+			if g.graphDirection == "LR" {
 				mappingCoord = g.reserveSpotInGrid(g.nodes[child.index], &gridCoord{x: childLevel, y: highestPosition})
 			} else {
 				mappingCoord = g.reserveSpotInGrid(g.nodes[child.index], &gridCoord{x: highestPosition, y: childLevel})
@@ -279,6 +305,13 @@ func (g *graph) createMapping() {
 		g.determineLabelLine(e)
 	}
 
+	// Flip grid coordinates for BT/RL before drawing
+	if actualDirection == "BT" || actualDirection == "RL" {
+		g.flipGridCoordinates(actualDirection)
+	}
+	// Restore the actual direction so arrow drawing uses the correct logic
+	g.graphDirection = actualDirection
+
 	// ! Last point before we manipulate the drawing !
 	log.Debug("Mapping complete, starting to draw")
 
@@ -294,6 +327,103 @@ func (g *graph) createMapping() {
 
 	// Offset everything if subgraphs have negative coordinates
 	g.offsetDrawingForSubgraphs()
+}
+
+func (g *graph) flipGridCoordinates(direction string) {
+	// Find max coordinates across all nodes
+	maxX := 0
+	maxY := 0
+	for _, n := range g.nodes {
+		if n.gridCoord == nil {
+			continue
+		}
+		// Each node occupies a 3x3 grid area; the coord is the top-left corner
+		if n.gridCoord.x+2 > maxX {
+			maxX = n.gridCoord.x + 2
+		}
+		if n.gridCoord.y+2 > maxY {
+			maxY = n.gridCoord.y + 2
+		}
+	}
+
+	// Also check grid map for max extent
+	for coord := range g.grid {
+		if coord.x > maxX {
+			maxX = coord.x
+		}
+		if coord.y > maxY {
+			maxY = coord.y
+		}
+	}
+
+	if direction == "BT" {
+		// Flip Y coordinates
+		newGrid := make(map[gridCoord]*node)
+		for coord, n := range g.grid {
+			newCoord := gridCoord{x: coord.x, y: maxY - coord.y}
+			newGrid[newCoord] = n
+		}
+		g.grid = newGrid
+
+		for _, n := range g.nodes {
+			if n.gridCoord != nil {
+				// The node's gridCoord is its top-left; after flipping, adjust so top-left is correct
+				n.gridCoord.y = maxY - n.gridCoord.y - 2
+			}
+		}
+
+		// Flip columnWidth stays the same; flip rowHeight
+		newRowHeight := make(map[int]int)
+		for row, h := range g.rowHeight {
+			newRowHeight[maxY-row] = h
+		}
+		g.rowHeight = newRowHeight
+
+		// Flip edge paths
+		for _, e := range g.edges {
+			for i, coord := range e.path {
+				e.path[i] = gridCoord{x: coord.x, y: maxY - coord.y}
+			}
+			if e.labelLine != nil {
+				for i, coord := range e.labelLine {
+					e.labelLine[i] = gridCoord{x: coord.x, y: maxY - coord.y}
+				}
+			}
+		}
+	} else if direction == "RL" {
+		// Flip X coordinates
+		newGrid := make(map[gridCoord]*node)
+		for coord, n := range g.grid {
+			newCoord := gridCoord{x: maxX - coord.x, y: coord.y}
+			newGrid[newCoord] = n
+		}
+		g.grid = newGrid
+
+		for _, n := range g.nodes {
+			if n.gridCoord != nil {
+				n.gridCoord.x = maxX - n.gridCoord.x - 2
+			}
+		}
+
+		// Flip columnWidth
+		newColumnWidth := make(map[int]int)
+		for col, w := range g.columnWidth {
+			newColumnWidth[maxX-col] = w
+		}
+		g.columnWidth = newColumnWidth
+
+		// Flip edge paths
+		for _, e := range g.edges {
+			for i, coord := range e.path {
+				e.path[i] = gridCoord{x: maxX - coord.x, y: coord.y}
+			}
+			if e.labelLine != nil {
+				for i, coord := range e.labelLine {
+					e.labelLine[i] = gridCoord{x: maxX - coord.x, y: coord.y}
+				}
+			}
+		}
+	}
 }
 
 func (g *graph) calculateSubgraphBoundingBoxes() {
@@ -618,13 +748,13 @@ func (g *graph) getSubgraphDepth(sg *subgraph) int {
 	return 1 + g.getSubgraphDepth(sg.parent)
 }
 
-func (g *graph) getNode(nodeName string) (*node, error) {
+func (g *graph) getNode(nodeID string) (*node, error) {
 	for _, n := range g.nodes {
-		if n.name == nodeName {
+		if n.id == nodeID {
 			return n, nil
 		}
 	}
-	return &node{}, errors.New("node " + nodeName + " not found")
+	return &node{}, errors.New("node " + nodeID + " not found")
 }
 
 func (g *graph) appendNode(n *node) {
@@ -634,7 +764,7 @@ func (g *graph) appendNode(n *node) {
 func (g graph) getEdgesFromNode(n *node) []edge {
 	edges := []edge{}
 	for _, edge := range g.edges {
-		if (edge.from.name) == (n.name) {
+		if edge.from.id == n.id {
 			edges = append(edges, *edge)
 		}
 	}
@@ -645,7 +775,7 @@ func (g *graph) getChildren(n *node) []*node {
 	edges := g.getEdgesFromNode(n)
 	children := []*node{}
 	for _, edge := range edges {
-		if edge.from.name == n.name {
+		if edge.from.id == n.id {
 			children = append(children, edge.to)
 		}
 	}
