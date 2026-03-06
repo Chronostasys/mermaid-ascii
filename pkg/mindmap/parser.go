@@ -1,3 +1,4 @@
+// Package mindmap provides parsing and rendering of Mermaid mindmap diagrams.
 package mindmap
 
 import (
@@ -7,12 +8,15 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// MindmapKeyword is the keyword that identifies a mindmap diagram in Mermaid syntax.
 const MindmapKeyword = "mindmap"
 
+// MindmapDiagram represents a parsed mindmap diagram with a root node.
 type MindmapDiagram struct {
 	Root *MindmapNode
 }
 
+// MindmapNode represents a single node in the mindmap tree.
 type MindmapNode struct {
 	Text     string
 	Shape    NodeShape
@@ -20,17 +24,25 @@ type MindmapNode struct {
 	Depth    int
 }
 
+// NodeShape represents the visual shape of a mindmap node.
 type NodeShape int
 
 const (
+	// ShapeDefault represents a node with no explicit shape delimiter.
 	ShapeDefault NodeShape = iota
-	ShapeSquare      // [text]
-	ShapeRounded     // (text)
-	ShapeBang        // ))text((
-	ShapeCloud       // )text(
-	ShapeHexagon     // {{text}}
+	// ShapeSquare represents a node enclosed in square brackets [text].
+	ShapeSquare
+	// ShapeRounded represents a node enclosed in parentheses (text).
+	ShapeRounded
+	// ShapeBang represents a node enclosed in ))text(( delimiters.
+	ShapeBang
+	// ShapeCloud represents a node enclosed in )text( delimiters.
+	ShapeCloud
+	// ShapeHexagon represents a node enclosed in {{text}} delimiters.
+	ShapeHexagon
 )
 
+// IsMindmapDiagram reports whether the input text is a mindmap diagram.
 func IsMindmapDiagram(input string) bool {
 	lines := strings.Split(input, "\n")
 	for _, line := range lines {
@@ -43,6 +55,7 @@ func IsMindmapDiagram(input string) bool {
 	return false
 }
 
+// Parse parses Mermaid mindmap text into a MindmapDiagram.
 func Parse(input string) (*MindmapDiagram, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {

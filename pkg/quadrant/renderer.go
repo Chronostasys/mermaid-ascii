@@ -12,6 +12,7 @@ const (
 	gridHeight = 20
 )
 
+// Render renders a QuadrantChart as a formatted grid string using Unicode or ASCII characters.
 func Render(qc *QuadrantChart, config *diagram.Config) (string, error) {
 	if qc == nil {
 		return "", fmt.Errorf("no quadrant data")
@@ -84,9 +85,9 @@ func Render(qc *QuadrantChart, config *diagram.Config) (string, error) {
 	// Place quadrant labels in centers
 	midX := gridWidth / 2
 	midY := gridHeight / 2
-	placeLabel(grid, qc.Quadrant2, midX/2, midY/2)       // top-left
-	placeLabel(grid, qc.Quadrant1, midX+midX/2, midY/2)   // top-right
-	placeLabel(grid, qc.Quadrant3, midX/2, midY+midY/2)   // bottom-left
+	placeLabel(grid, qc.Quadrant2, midX/2, midY/2)          // top-left
+	placeLabel(grid, qc.Quadrant1, midX+midX/2, midY/2)     // top-right
+	placeLabel(grid, qc.Quadrant3, midX/2, midY+midY/2)     // bottom-left
 	placeLabel(grid, qc.Quadrant4, midX+midX/2, midY+midY/2) // bottom-right
 
 	// Y-axis top label

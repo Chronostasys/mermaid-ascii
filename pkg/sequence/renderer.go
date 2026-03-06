@@ -152,6 +152,7 @@ func (ls *lifelineState) isActive(pIdx int) bool {
 	return ls.created[pIdx] && !ls.destroyed[pIdx]
 }
 
+// Render renders a parsed SequenceDiagram as ASCII or Unicode text.
 func Render(sd *SequenceDiagram, config *diagram.Config) (string, error) {
 	if sd == nil || len(sd.Participants) == 0 {
 		return "", fmt.Errorf("no participants")

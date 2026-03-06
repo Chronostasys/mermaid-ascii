@@ -7,6 +7,7 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// Render renders a TimelineDiagram as a formatted string using Unicode or ASCII characters.
 func Render(td *TimelineDiagram, config *diagram.Config) (string, error) {
 	if td == nil || len(td.Events) == 0 {
 		return "", fmt.Errorf("no events to render")

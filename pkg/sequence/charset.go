@@ -29,6 +29,7 @@ type BoxChars struct {
 	ActivationRight rune
 }
 
+// ASCII defines the box-drawing character set using plain ASCII characters.
 var ASCII = BoxChars{
 	TopLeft:      '+',
 	TopRight:     '+',
@@ -55,6 +56,7 @@ var ASCII = BoxChars{
 	ActivationRight: '|',
 }
 
+// Unicode defines the box-drawing character set using Unicode box-drawing characters.
 var Unicode = BoxChars{
 	TopLeft:      '┌',
 	TopRight:     '┐',

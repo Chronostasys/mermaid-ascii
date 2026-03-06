@@ -7,6 +7,7 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// Render renders a MindmapDiagram as a tree-structured string using Unicode or ASCII characters.
 func Render(md *MindmapDiagram, config *diagram.Config) (string, error) {
 	if md == nil || md.Root == nil {
 		return "", fmt.Errorf("no mindmap data")

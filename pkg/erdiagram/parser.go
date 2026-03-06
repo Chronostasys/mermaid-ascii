@@ -1,3 +1,4 @@
+// Package erdiagram parses and renders Mermaid entity-relationship diagrams as ASCII/Unicode art.
 package erdiagram
 
 import (
@@ -8,6 +9,7 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// ERDiagramKeyword is the Mermaid keyword that identifies an entity-relationship diagram.
 const ERDiagramKeyword = "erDiagram"
 
 var (

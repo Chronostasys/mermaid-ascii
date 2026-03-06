@@ -1,3 +1,4 @@
+// Package journey provides parsing and rendering of Mermaid user journey diagrams.
 package journey
 
 import (
@@ -9,6 +10,7 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// JourneyKeyword is the keyword that identifies a journey diagram in Mermaid syntax.
 const JourneyKeyword = "journey"
 
 var (
@@ -17,22 +19,26 @@ var (
 	taskRegex    = regexp.MustCompile(`^\s*(.+?)\s*:\s*(\d+)\s*(?::\s*(.+))?\s*$`)
 )
 
+// JourneyDiagram represents a parsed user journey diagram with sections and tasks.
 type JourneyDiagram struct {
 	Title    string
 	Sections []*JourneySection
 }
 
+// JourneySection represents a named section within a journey diagram containing tasks.
 type JourneySection struct {
 	Name  string
 	Tasks []*JourneyTask
 }
 
+// JourneyTask represents a single task in a journey diagram with a satisfaction score.
 type JourneyTask struct {
 	Name   string
 	Score  int
 	Actors []string
 }
 
+// IsJourneyDiagram reports whether the input text is a journey diagram.
 func IsJourneyDiagram(input string) bool {
 	lines := strings.Split(input, "\n")
 	for _, line := range lines {
@@ -45,6 +51,7 @@ func IsJourneyDiagram(input string) bool {
 	return false
 }
 
+// Parse parses Mermaid journey text into a JourneyDiagram.
 func Parse(input string) (*JourneyDiagram, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {

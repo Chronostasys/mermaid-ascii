@@ -1,3 +1,5 @@
+// Package requirement implements parsing and rendering of requirement diagrams
+// in Mermaid syntax.
 package requirement
 
 import (
@@ -8,6 +10,7 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// RequirementDiagramKeyword is the Mermaid keyword that identifies a requirement diagram.
 const RequirementDiagramKeyword = "requirementDiagram"
 
 var (

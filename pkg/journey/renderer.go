@@ -8,10 +8,11 @@ import (
 )
 
 const (
-	maxScore     = 5
-	barMaxWidth  = 20
+	maxScore    = 5
+	barMaxWidth = 20
 )
 
+// Render renders a JourneyDiagram as a formatted table string using Unicode or ASCII characters.
 func Render(jd *JourneyDiagram, config *diagram.Config) (string, error) {
 	if jd == nil || len(jd.Sections) == 0 {
 		return "", fmt.Errorf("no journey data")

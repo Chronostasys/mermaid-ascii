@@ -1,3 +1,4 @@
+// Package statediagram parses and renders Mermaid state diagrams as ASCII/Unicode art.
 package statediagram
 
 import (
@@ -8,6 +9,7 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// StateDiagramKeyword is the Mermaid keyword that identifies a state diagram.
 const StateDiagramKeyword = "stateDiagram-v2"
 
 var (
@@ -52,7 +54,9 @@ type Transition struct {
 type NotePosition int
 
 const (
+	// NoteRight places the note to the right of the state.
 	NoteRight NotePosition = iota
+	// NoteLeft places the note to the left of the state.
 	NoteLeft
 )
 

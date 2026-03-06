@@ -1,3 +1,4 @@
+// Package timeline provides parsing and rendering of Mermaid timeline diagrams.
 package timeline
 
 import (
@@ -8,6 +9,7 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// TimelineKeyword is the keyword that identifies a timeline diagram in Mermaid syntax.
 const TimelineKeyword = "timeline"
 
 var (
@@ -16,23 +18,27 @@ var (
 	eventRegex   = regexp.MustCompile(`^\s*(.+?)\s*:\s*(.+)$`)
 )
 
+// TimelineDiagram represents a parsed timeline diagram with optional sections and events.
 type TimelineDiagram struct {
 	Title    string
 	Sections []*TimelineSection
 	Events   []*TimelineEvent
 }
 
+// TimelineSection represents a named section within a timeline diagram.
 type TimelineSection struct {
 	Name   string
 	Events []*TimelineEvent
 }
 
+// TimelineEvent represents a single event on the timeline, with a time period and associated events.
 type TimelineEvent struct {
 	Period  string
 	Events  []string
 	Section *TimelineSection
 }
 
+// IsTimelineDiagram reports whether the input text is a timeline diagram.
 func IsTimelineDiagram(input string) bool {
 	lines := strings.Split(input, "\n")
 	for _, line := range lines {
@@ -45,6 +51,7 @@ func IsTimelineDiagram(input string) bool {
 	return false
 }
 
+// Parse parses Mermaid timeline text into a TimelineDiagram.
 func Parse(input string) (*TimelineDiagram, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {

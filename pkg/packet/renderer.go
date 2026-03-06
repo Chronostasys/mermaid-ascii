@@ -9,6 +9,7 @@ import (
 
 const bitsPerRow = 32
 
+// Render renders a packet diagram as ASCII/Unicode text.
 func Render(pd *PacketDiagram, config *diagram.Config) (string, error) {
 	if pd == nil || len(pd.Fields) == 0 {
 		return "", fmt.Errorf("no fields to render")

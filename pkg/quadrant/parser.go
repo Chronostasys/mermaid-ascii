@@ -1,3 +1,4 @@
+// Package quadrant provides parsing and rendering of Mermaid quadrant chart diagrams.
 package quadrant
 
 import (
@@ -9,38 +10,42 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// QuadrantKeyword is the keyword that identifies a quadrant chart diagram in Mermaid syntax.
 const QuadrantKeyword = "quadrantChart"
 
 var (
-	titleRegex    = regexp.MustCompile(`^\s*title\s+(.+)$`)
-	xAxisRegex    = regexp.MustCompile(`^\s*x-axis\s+(.+?)(?:\s*-->\s*(.+))?$`)
-	yAxisRegex    = regexp.MustCompile(`^\s*y-axis\s+(.+?)(?:\s*-->\s*(.+))?$`)
+	titleRegex     = regexp.MustCompile(`^\s*title\s+(.+)$`)
+	xAxisRegex     = regexp.MustCompile(`^\s*x-axis\s+(.+?)(?:\s*-->\s*(.+))?$`)
+	yAxisRegex     = regexp.MustCompile(`^\s*y-axis\s+(.+?)(?:\s*-->\s*(.+))?$`)
 	quadrant1Regex = regexp.MustCompile(`^\s*quadrant-1\s+(.+)$`)
 	quadrant2Regex = regexp.MustCompile(`^\s*quadrant-2\s+(.+)$`)
 	quadrant3Regex = regexp.MustCompile(`^\s*quadrant-3\s+(.+)$`)
 	quadrant4Regex = regexp.MustCompile(`^\s*quadrant-4\s+(.+)$`)
-	pointRegex    = regexp.MustCompile(`^\s*(.+?)\s*:\s*\[\s*([\d.]+)\s*,\s*([\d.]+)\s*\]\s*$`)
+	pointRegex     = regexp.MustCompile(`^\s*(.+?)\s*:\s*\[\s*([\d.]+)\s*,\s*([\d.]+)\s*\]\s*$`)
 )
 
+// QuadrantChart represents a parsed quadrant chart with axis labels, quadrant names, and data points.
 type QuadrantChart struct {
-	Title      string
-	XAxisLeft  string
-	XAxisRight string
+	Title       string
+	XAxisLeft   string
+	XAxisRight  string
 	YAxisBottom string
 	YAxisTop    string
-	Quadrant1  string // top-right
-	Quadrant2  string // top-left
-	Quadrant3  string // bottom-left
-	Quadrant4  string // bottom-right
-	Points     []*DataPoint
+	Quadrant1   string // top-right
+	Quadrant2   string // top-left
+	Quadrant3   string // bottom-left
+	Quadrant4   string // bottom-right
+	Points      []*DataPoint
 }
 
+// DataPoint represents a labeled point with X and Y coordinates in the range [0, 1].
 type DataPoint struct {
 	Label string
 	X     float64
 	Y     float64
 }
 
+// IsQuadrantChart reports whether the input text is a quadrant chart diagram.
 func IsQuadrantChart(input string) bool {
 	lines := strings.Split(input, "\n")
 	for _, line := range lines {
@@ -53,6 +58,7 @@ func IsQuadrantChart(input string) bool {
 	return false
 }
 
+// Parse parses Mermaid quadrant chart text into a QuadrantChart.
 func Parse(input string) (*QuadrantChart, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {
@@ -71,11 +77,11 @@ func Parse(input string) (*QuadrantChart, error) {
 	lines = lines[1:]
 
 	qc := &QuadrantChart{
-		XAxisLeft:  "Low",
-		XAxisRight: "High",
+		XAxisLeft:   "Low",
+		XAxisRight:  "High",
 		YAxisBottom: "Low",
 		YAxisTop:    "High",
-		Points:     []*DataPoint{},
+		Points:      []*DataPoint{},
 	}
 
 	for _, line := range lines {

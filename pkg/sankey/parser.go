@@ -1,3 +1,5 @@
+// Package sankey implements parsing and rendering of Sankey diagrams
+// in Mermaid syntax.
 package sankey
 
 import (
@@ -8,6 +10,7 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// SankeyBetaKeyword is the Mermaid keyword that identifies a Sankey diagram.
 const SankeyBetaKeyword = "sankey-beta"
 
 // Flow represents a single flow from source to target with a value.

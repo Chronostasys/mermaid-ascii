@@ -12,6 +12,7 @@ const (
 	cardPadding        = 2
 )
 
+// Render renders a Kanban board as ASCII/Unicode text.
 func Render(kb *KanbanBoard, config *diagram.Config) (string, error) {
 	if kb == nil || len(kb.Columns) == 0 {
 		return "", fmt.Errorf("no kanban data")

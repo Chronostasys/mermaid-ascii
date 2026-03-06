@@ -1,3 +1,4 @@
+// Package piechart parses and renders Mermaid pie charts as ASCII/Unicode art.
 package piechart
 
 import (
@@ -9,6 +10,7 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// PieKeyword is the Mermaid keyword that identifies a pie chart.
 const PieKeyword = "pie"
 
 var (
@@ -16,18 +18,21 @@ var (
 	sliceRegex = regexp.MustCompile(`^\s*"([^"]+)"\s*:\s*([\d.]+)\s*$`)
 )
 
+// PieChart represents a parsed pie chart with a title and data slices.
 type PieChart struct {
 	Title  string
 	Slices []*Slice
 	Total  float64
 }
 
+// Slice represents a single data slice in a pie chart.
 type Slice struct {
 	Label      string
 	Value      float64
 	Percentage float64
 }
 
+// IsPieChart returns true if the input begins with the pie keyword.
 func IsPieChart(input string) bool {
 	lines := strings.Split(input, "\n")
 	for _, line := range lines {
@@ -40,6 +45,7 @@ func IsPieChart(input string) bool {
 	return false
 }
 
+// Parse parses a pie chart from the given input string.
 func Parse(input string) (*PieChart, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {

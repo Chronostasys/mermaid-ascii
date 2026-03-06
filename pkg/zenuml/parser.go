@@ -1,3 +1,7 @@
+// Package zenuml implements parsing and rendering of ZenUML sequence diagrams
+// in Mermaid syntax.
+// Package zenuml implements parsing and rendering of ZenUML sequence diagrams
+// in Mermaid syntax.
 package zenuml
 
 import (
@@ -8,6 +12,8 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// ZenUMLKeyword is the Mermaid keyword that identifies a ZenUML diagram.
+// ZenUMLKeyword is the Mermaid keyword that identifies a ZenUML diagram.
 const ZenUMLKeyword = "zenuml"
 
 var (
@@ -55,8 +61,11 @@ var (
 type MessageType int
 
 const (
-	SyncMessage  MessageType = iota
+	// SyncMessage represents a synchronous message call.
+	SyncMessage MessageType = iota
+	// AsyncMessage represents an asynchronous message call.
 	AsyncMessage
+	// ReturnMessage represents a return message from a call.
 	ReturnMessage
 )
 

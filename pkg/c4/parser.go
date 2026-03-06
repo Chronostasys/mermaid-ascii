@@ -1,3 +1,5 @@
+// Package c4 implements parsing and rendering of C4 architecture diagrams
+// (C4Context, C4Container, C4Component, C4Dynamic) in Mermaid syntax.
 package c4
 
 import (
@@ -38,9 +40,13 @@ var (
 type C4DiagramType int
 
 const (
-	C4Context   C4DiagramType = iota
+	// C4Context represents a C4 context diagram.
+	C4Context C4DiagramType = iota
+	// C4Container represents a C4 container diagram.
 	C4Container
+	// C4Component represents a C4 component diagram.
 	C4Component
+	// C4Dynamic represents a C4 dynamic diagram.
 	C4Dynamic
 )
 

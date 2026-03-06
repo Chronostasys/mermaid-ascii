@@ -1,3 +1,4 @@
+// Package classdiagram parses and renders Mermaid class diagrams as ASCII/Unicode art.
 package classdiagram
 
 import (
@@ -8,6 +9,7 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// ClassDiagramKeyword is the Mermaid keyword that identifies a class diagram.
 const ClassDiagramKeyword = "classDiagram"
 
 var (

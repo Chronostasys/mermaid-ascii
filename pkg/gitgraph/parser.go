@@ -1,3 +1,4 @@
+// Package gitgraph provides parsing and rendering of Mermaid gitGraph diagrams.
 package gitgraph
 
 import (
@@ -8,22 +9,25 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// GitGraphKeyword is the keyword that identifies a gitGraph diagram in Mermaid syntax.
 const GitGraphKeyword = "gitGraph"
 
 var (
-	commitRegex   = regexp.MustCompile(`^\s*commit(?:\s+id:\s*"([^"]*)")?(?:\s+msg:\s*"([^"]*)")?(?:\s+tag:\s*"([^"]*)")?(?:\s+type:\s*(NORMAL|REVERSE|HIGHLIGHT))?\s*$`)
-	branchRegex   = regexp.MustCompile(`^\s*branch\s+(\S+)\s*$`)
-	checkoutRegex = regexp.MustCompile(`^\s*checkout\s+(\S+)\s*$`)
-	mergeRegex    = regexp.MustCompile(`^\s*merge\s+(\S+)(?:\s+id:\s*"([^"]*)")?(?:\s+tag:\s*"([^"]*)")?\s*$`)
+	commitRegex     = regexp.MustCompile(`^\s*commit(?:\s+id:\s*"([^"]*)")?(?:\s+msg:\s*"([^"]*)")?(?:\s+tag:\s*"([^"]*)")?(?:\s+type:\s*(NORMAL|REVERSE|HIGHLIGHT))?\s*$`)
+	branchRegex     = regexp.MustCompile(`^\s*branch\s+(\S+)\s*$`)
+	checkoutRegex   = regexp.MustCompile(`^\s*checkout\s+(\S+)\s*$`)
+	mergeRegex      = regexp.MustCompile(`^\s*merge\s+(\S+)(?:\s+id:\s*"([^"]*)")?(?:\s+tag:\s*"([^"]*)")?\s*$`)
 	cherryPickRegex = regexp.MustCompile(`^\s*cherry-pick\s+id:\s*"([^"]+)"\s*$`)
 )
 
+// GitGraph represents a parsed git graph diagram containing commits and branches.
 type GitGraph struct {
-	Commits    []*Commit
-	Branches   []*Branch
+	Commits       []*Commit
+	Branches      []*Branch
 	CurrentBranch string
 }
 
+// Commit represents a single commit in the git graph.
 type Commit struct {
 	ID      string
 	Message string
@@ -34,20 +38,26 @@ type Commit struct {
 	Lane    int
 }
 
+// Branch represents a git branch with its display lane position.
 type Branch struct {
-	Name      string
-	Lane      int
+	Name        string
+	Lane        int
 	StartCommit string
 }
 
+// CommitType represents the visual type of a commit node.
 type CommitType int
 
 const (
+	// Normal represents a standard commit.
 	Normal CommitType = iota
+	// Reverse represents a reversed commit, displayed with a distinct marker.
 	Reverse
+	// Highlight represents a highlighted commit, displayed with emphasis.
 	Highlight
 )
 
+// IsGitGraph reports whether the input text is a gitGraph diagram.
 func IsGitGraph(input string) bool {
 	lines := strings.Split(input, "\n")
 	for _, line := range lines {
@@ -60,6 +70,7 @@ func IsGitGraph(input string) bool {
 	return false
 }
 
+// Parse parses Mermaid gitGraph text into a GitGraph.
 func Parse(input string) (*GitGraph, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {

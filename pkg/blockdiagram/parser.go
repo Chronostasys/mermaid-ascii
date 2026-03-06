@@ -1,3 +1,5 @@
+// Package blockdiagram implements parsing and rendering of block-beta diagrams
+// in Mermaid syntax.
 package blockdiagram
 
 import (
@@ -9,6 +11,7 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// BlockBetaKeyword is the Mermaid keyword that identifies a block-beta diagram.
 const BlockBetaKeyword = "block-beta"
 
 var (

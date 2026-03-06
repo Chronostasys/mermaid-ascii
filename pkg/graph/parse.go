@@ -11,6 +11,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// Properties holds the parsed representation of a Mermaid graph definition,
+// including nodes, edges, subgraphs, style classes, and layout configuration.
 type Properties struct {
 	data             *orderedmap.OrderedMap[string, []textEdge]
 	nodeInfo         map[string]textNode // maps node id to its textNode (for shape/label info)
@@ -586,6 +588,7 @@ func (gp *Properties) parseString(line string) ([]textNode, error) {
 	return []textNode{}, errors.New("Could not parse line: " + line)
 }
 
+// Parse parses a Mermaid graph or flowchart definition string into a Properties struct.
 func Parse(mermaid string) (*Properties, error) {
 	styleType := "cli"
 

@@ -7,6 +7,7 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// Render renders a GitGraph as a formatted string using Unicode or ASCII characters.
 func Render(gg *GitGraph, config *diagram.Config) (string, error) {
 	if gg == nil || len(gg.Commits) == 0 {
 		return "", fmt.Errorf("no commits to render")

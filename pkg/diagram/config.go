@@ -89,6 +89,8 @@ func NewConfig(useAscii bool, graphDirection, styleType string) (*Config, error)
 	return config, nil
 }
 
+// NewCLIConfig creates a Config suitable for CLI output with the given parameters.
+// Returns an error if any values are invalid.
 func NewCLIConfig(useAscii, showCoords, verbose bool, boxBorderPadding, paddingX, paddingY int, graphDirection string) (*Config, error) {
 	defaults := DefaultConfig()
 	config := &Config{
@@ -112,6 +114,8 @@ func NewCLIConfig(useAscii, showCoords, verbose bool, boxBorderPadding, paddingX
 	return config, nil
 }
 
+// NewWebConfig creates a Config suitable for web/HTML output with the given parameters.
+// Returns an error if any values are invalid.
 func NewWebConfig(useAscii bool, boxBorderPadding, paddingX, paddingY int) (*Config, error) {
 	defaults := DefaultConfig()
 	config := &Config{

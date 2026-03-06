@@ -21,6 +21,7 @@ const (
 	barCritASCII        = "!"
 )
 
+// Render renders a GanttDiagram to a string using horizontal bar chart layout.
 func Render(gd *GanttDiagram, config *diagram.Config) (string, error) {
 	if gd == nil || len(gd.Tasks) == 0 {
 		return "", fmt.Errorf("no tasks to render")

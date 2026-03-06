@@ -12,6 +12,7 @@ const (
 	chartWidth  = 50
 )
 
+// Render renders an XYChart as a formatted bar/line chart string using Unicode or ASCII characters.
 func Render(chart *XYChart, config *diagram.Config) (string, error) {
 	if chart == nil {
 		return "", fmt.Errorf("no chart data")

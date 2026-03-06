@@ -1,3 +1,4 @@
+// Package xychart provides parsing and rendering of Mermaid xychart-beta diagrams.
 package xychart
 
 import (
@@ -9,16 +10,18 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// XYChartKeyword is the keyword that identifies an XY chart diagram in Mermaid syntax.
 const XYChartKeyword = "xychart-beta"
 
 var (
-	titleRegex   = regexp.MustCompile(`^\s*title\s+"([^"]+)"$`)
-	xAxisRegex   = regexp.MustCompile(`^\s*x-axis\s+"([^"]+)"\s+\[(.+)\]$`)
-	yAxisRegex   = regexp.MustCompile(`^\s*y-axis\s+"([^"]+)"(?:\s+(\d+)\s*-->\s*(\d+))?$`)
-	barRegex     = regexp.MustCompile(`^\s*bar\s+\[(.+)\]$`)
-	lineRegex    = regexp.MustCompile(`^\s*line\s+\[(.+)\]$`)
+	titleRegex = regexp.MustCompile(`^\s*title\s+"([^"]+)"$`)
+	xAxisRegex = regexp.MustCompile(`^\s*x-axis\s+"([^"]+)"\s+\[(.+)\]$`)
+	yAxisRegex = regexp.MustCompile(`^\s*y-axis\s+"([^"]+)"(?:\s+(\d+)\s*-->\s*(\d+))?$`)
+	barRegex   = regexp.MustCompile(`^\s*bar\s+\[(.+)\]$`)
+	lineRegex  = regexp.MustCompile(`^\s*line\s+\[(.+)\]$`)
 )
 
+// XYChart represents a parsed XY chart with optional bar and line data series.
 type XYChart struct {
 	Title    string
 	XLabel   string
@@ -30,6 +33,7 @@ type XYChart struct {
 	LineData []float64
 }
 
+// IsXYChart reports whether the input text is an XY chart diagram.
 func IsXYChart(input string) bool {
 	lines := strings.Split(input, "\n")
 	for _, line := range lines {
@@ -42,6 +46,7 @@ func IsXYChart(input string) bool {
 	return false
 }
 
+// Parse parses Mermaid xychart-beta text into an XYChart.
 func Parse(input string) (*XYChart, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {

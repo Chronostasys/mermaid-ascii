@@ -2,6 +2,7 @@ package graph
 
 type direction genericCoord
 
+// Direction constants for edge routing and arrow placement.
 var (
 	Up         = direction{1, 0}
 	Down       = direction{1, 2}

@@ -1,5 +1,6 @@
 package graph
 
+// Min returns the smaller of two integers.
 func Min(x, y int) int {
 	if x < y {
 		return x
@@ -7,6 +8,7 @@ func Min(x, y int) int {
 	return y
 }
 
+// Max returns the larger of two integers.
 func Max(x, y int) int {
 	if x > y {
 		return x
@@ -14,6 +16,7 @@ func Max(x, y int) int {
 	return y
 }
 
+// Abs returns the absolute value of an integer.
 func Abs(x int) int {
 	if x < 0 {
 		return -x
@@ -21,6 +24,7 @@ func Abs(x int) int {
 	return x
 }
 
+// CeilDiv returns the ceiling of the integer division x/y.
 func CeilDiv(x, y int) int {
 	if x%y == 0 {
 		return x / y

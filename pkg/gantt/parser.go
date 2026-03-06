@@ -1,3 +1,4 @@
+// Package gantt parses and renders Mermaid Gantt charts as ASCII/Unicode art.
 package gantt
 
 import (
@@ -9,6 +10,7 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// GanttKeyword is the Mermaid keyword that identifies a Gantt chart.
 const GanttKeyword = "gantt"
 
 var (
@@ -19,6 +21,7 @@ var (
 	taskRegex       = regexp.MustCompile(`^\s*(.+?)\s*:\s*(.+)$`)
 )
 
+// GanttDiagram represents a parsed Gantt chart with sections and tasks.
 type GanttDiagram struct {
 	Title      string
 	DateFormat string
@@ -26,11 +29,13 @@ type GanttDiagram struct {
 	Tasks      []*Task
 }
 
+// Section represents a named group of tasks in a Gantt chart.
 type Section struct {
 	Name  string
 	Tasks []*Task
 }
 
+// Task represents a single task in a Gantt chart with timing and status information.
 type Task struct {
 	Name      string
 	ID        string
@@ -42,6 +47,7 @@ type Task struct {
 	Section   *Section
 }
 
+// IsGanttDiagram returns true if the input begins with the gantt keyword.
 func IsGanttDiagram(input string) bool {
 	lines := strings.Split(input, "\n")
 	for _, line := range lines {
@@ -54,6 +60,7 @@ func IsGanttDiagram(input string) bool {
 	return false
 }
 
+// Parse parses a Gantt chart from the given input string.
 func Parse(input string) (*GanttDiagram, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {

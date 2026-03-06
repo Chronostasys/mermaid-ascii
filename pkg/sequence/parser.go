@@ -9,9 +9,12 @@ import (
 )
 
 const (
+	// SequenceDiagramKeyword is the keyword that identifies a sequence diagram in Mermaid syntax.
 	SequenceDiagramKeyword = "sequenceDiagram"
-	SolidArrowSyntax       = "->>"
-	DottedArrowSyntax      = "-->>"
+	// SolidArrowSyntax is the Mermaid syntax for a solid arrow with filled arrowhead (->>).
+	SolidArrowSyntax = "->>"
+	// DottedArrowSyntax is the Mermaid syntax for a dotted arrow with filled arrowhead (-->>).
+	DottedArrowSyntax = "-->>"
 )
 
 var (
@@ -95,13 +98,17 @@ type Element interface {
 	elementType() string
 }
 
+// ParticipantType indicates how a participant is rendered in the diagram.
 type ParticipantType int
 
 const (
-	ParticipantBox   ParticipantType = iota
-	ParticipantActor                         // Rendered as stick figure
+	// ParticipantBox renders the participant as a rectangular box.
+	ParticipantBox ParticipantType = iota
+	// ParticipantActor renders the participant as a stick figure.
+	ParticipantActor
 )
 
+// Participant represents a participant (actor or box) in a sequence diagram.
 type Participant struct {
 	ID    string
 	Label string
@@ -109,6 +116,7 @@ type Participant struct {
 	Type  ParticipantType
 }
 
+// Message represents a message arrow between two participants.
 type Message struct {
 	From       *Participant
 	To         *Participant
@@ -121,6 +129,7 @@ type Message struct {
 
 func (m *Message) elementType() string { return "message" }
 
+// ArrowType represents the style of arrow used for a message.
 type ArrowType int
 
 const (
@@ -134,6 +143,7 @@ const (
 	DottedAsync                       // --)  dotted with open arrow (async)
 )
 
+// String returns a human-readable name for the ArrowType.
 func (a ArrowType) String() string {
 	switch a {
 	case SolidArrow:
@@ -166,8 +176,11 @@ func (a ArrowType) IsDotted() bool {
 type NotePosition int
 
 const (
+	// NoteRightOf places the note to the right of a participant.
 	NoteRightOf NotePosition = iota
+	// NoteLeftOf places the note to the left of a participant.
 	NoteLeftOf
+	// NoteOver places the note over one or two participants.
 	NoteOver
 )
 
@@ -205,6 +218,7 @@ type BlockSection struct {
 	Elements []Element
 }
 
+// IsSequenceDiagram returns true if the input text begins with the sequenceDiagram keyword.
 func IsSequenceDiagram(input string) bool {
 	lines := strings.Split(input, "\n")
 	for _, line := range lines {
@@ -217,6 +231,7 @@ func IsSequenceDiagram(input string) bool {
 	return false
 }
 
+// Parse parses Mermaid sequence diagram text into a SequenceDiagram model.
 func Parse(input string) (*SequenceDiagram, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {

@@ -1,3 +1,5 @@
+// Package architecture implements parsing and rendering of architecture-beta
+// diagrams in Mermaid syntax.
 package architecture
 
 import (
@@ -8,6 +10,7 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
+// ArchitectureBetaKeyword is the Mermaid keyword that identifies an architecture diagram.
 const ArchitectureBetaKeyword = "architecture-beta"
 
 var (
