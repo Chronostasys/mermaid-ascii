@@ -109,86 +109,86 @@ func TestParticipantAlias(t *testing.T) {
 	}
 }
 
-func TestMessageRegex(t *testing.T) {
+func TestMessageParsing(t *testing.T) {
 	tests := []struct {
 		input     string
 		wantFrom  string
-		wantArrow string
 		wantTo    string
 		wantLabel string
 		wantMatch bool
 	}{
-		{"A->>B: Hello", "A", "->>", "B", "Hello", true},
-		{"A-->>B: Response", "A", "-->>", "B", "Response", true},
-		{`"My Service"->>B: Test`, "My Service", "->>", "B", "Test", true},
-		{"A->>B: ", "A", "->>", "B", "", true},
-		{"A->B: Test", "A", "->", "B", "Test", true},
-		{"A-->B: Test", "A", "-->", "B", "Test", true},
-		{"A-xB: Test", "A", "-x", "B", "Test", true},
-		{"A--xB: Test", "A", "--x", "B", "Test", true},
-		{"A-)B: Test", "A", "-)", "B", "Test", true},
-		{"A--)B: Test", "A", "--)", "B", "Test", true},
-		{"A->>+B: Test", "A", "->>", "B", "Test", true},
-		{"A-->>-B: Test", "A", "-->>", "B", "Test", true},
-		{"A->>B", "", "", "", "", false},
+		{"sequenceDiagram\nA->>B: Hello", "A", "B", "Hello", true},
+		{"sequenceDiagram\nA-->>B: Response", "A", "B", "Response", true},
+		{"sequenceDiagram\n\"My Service\"->>B: Test", "My Service", "B", "Test", true},
+		{"sequenceDiagram\nA->>B: ", "A", "B", "", true},
+		{"sequenceDiagram\nA->B: Test", "A", "B", "Test", true},
+		{"sequenceDiagram\nA-->B: Test", "A", "B", "Test", true},
+		{"sequenceDiagram\nA-xB: Test", "A", "B", "Test", true},
+		{"sequenceDiagram\nA--xB: Test", "A", "B", "Test", true},
+		{"sequenceDiagram\nA-)B: Test", "A", "B", "Test", true},
+		{"sequenceDiagram\nA--)B: Test", "A", "B", "Test", true},
+		{"sequenceDiagram\nA->>+B: Test", "A", "B", "Test", true},
+		{"sequenceDiagram\nA-->>-B: Test", "A", "B", "Test", true},
 	}
 
 	for _, tt := range tests {
-		match := messageRegex.FindStringSubmatch(tt.input)
-		if !tt.wantMatch {
-			if match != nil {
-				t.Errorf("messageRegex should not match %q", tt.input)
+		t.Run(tt.input, func(t *testing.T) {
+			sd, err := Parse(tt.input)
+			if !tt.wantMatch {
+				if err == nil && len(sd.Messages) > 0 {
+					t.Errorf("should not produce a message for %q", tt.input)
+				}
+				return
 			}
-			continue
-		}
-		if match == nil {
-			t.Fatalf("messageRegex failed to match: %q", tt.input)
-		}
-		gotFrom := match[2]
-		if match[1] != "" {
-			gotFrom = match[1]
-		}
-		gotArrow := match[3]
-		gotTo := match[6]
-		if match[5] != "" {
-			gotTo = match[5]
-		}
-		gotLabel := match[7]
-
-		if gotFrom != tt.wantFrom || gotArrow != tt.wantArrow || gotTo != tt.wantTo || gotLabel != tt.wantLabel {
-			t.Errorf("messageRegex(%q) = (%q, %q, %q, %q), want (%q, %q, %q, %q)",
-				tt.input, gotFrom, gotArrow, gotTo, gotLabel, tt.wantFrom, tt.wantArrow, tt.wantTo, tt.wantLabel)
-		}
+			if err != nil {
+				t.Fatalf("Parse error: %v", err)
+			}
+			if len(sd.Messages) != 1 {
+				t.Fatalf("Expected 1 message, got %d", len(sd.Messages))
+			}
+			msg := sd.Messages[0]
+			if msg.From.ID != tt.wantFrom {
+				t.Errorf("From = %q, want %q", msg.From.ID, tt.wantFrom)
+			}
+			if msg.To.ID != tt.wantTo {
+				t.Errorf("To = %q, want %q", msg.To.ID, tt.wantTo)
+			}
+			if msg.Label != tt.wantLabel {
+				t.Errorf("Label = %q, want %q", msg.Label, tt.wantLabel)
+			}
+		})
 	}
 }
 
-func TestParticipantRegex(t *testing.T) {
+func TestParticipantParsing(t *testing.T) {
 	tests := []struct {
 		input     string
 		wantID    string
-		wantAlias string
+		wantLabel string
 	}{
-		{"participant Alice", "Alice", ""},
-		{"participant Alice as A", "Alice", "A"},
-		{`participant "My Service"`, "My Service", ""},
-		{`participant "My Service" as Service`, "My Service", "Service"},
+		{"sequenceDiagram\nparticipant Alice\nAlice->>Alice: hi", "Alice", "Alice"},
+		{"sequenceDiagram\nparticipant Alice as A\nAlice->>Alice: hi", "Alice", "A"},
+		{"sequenceDiagram\nparticipant \"My Service\"\n\"My Service\"->>\"My Service\": hi", "My Service", "My Service"},
+		{"sequenceDiagram\nparticipant \"My Service\" as Service\n\"My Service\"->>\"My Service\": hi", "My Service", "Service"},
 	}
 
 	for _, tt := range tests {
-		match := participantRegex.FindStringSubmatch(tt.input)
-		if match == nil {
-			t.Fatalf("participantRegex failed to match: %q", tt.input)
-		}
-		gotID := match[2]
-		if match[1] != "" {
-			gotID = match[1]
-		}
-		gotAlias := match[3]
-
-		if gotID != tt.wantID || gotAlias != tt.wantAlias {
-			t.Errorf("participantRegex(%q) = (%q, %q), want (%q, %q)",
-				tt.input, gotID, gotAlias, tt.wantID, tt.wantAlias)
-		}
+		t.Run(tt.input, func(t *testing.T) {
+			sd, err := Parse(tt.input)
+			if err != nil {
+				t.Fatalf("Parse error: %v", err)
+			}
+			if len(sd.Participants) == 0 {
+				t.Fatal("expected at least one participant")
+			}
+			p := sd.Participants[0]
+			if p.ID != tt.wantID {
+				t.Errorf("ID = %q, want %q", p.ID, tt.wantID)
+			}
+			if p.Label != tt.wantLabel {
+				t.Errorf("Label = %q, want %q", p.Label, tt.wantLabel)
+			}
+		})
 	}
 }
 

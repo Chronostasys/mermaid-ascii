@@ -2,10 +2,9 @@ package sequence
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
-	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
+	"github.com/pgavlin/mermaid-ascii/pkg/parser"
 )
 
 const (
@@ -15,53 +14,6 @@ const (
 	SolidArrowSyntax = "->>"
 	// DottedArrowSyntax is the Mermaid syntax for a dotted arrow with filled arrowhead (-->>).
 	DottedArrowSyntax = "-->>"
-)
-
-var (
-	// participantRegex matches participant/actor declarations: participant [ID] [as Label]
-	participantRegex = regexp.MustCompile(`^\s*(?:participant|actor)\s+(?:"([^"]+)"|(\S+))(?:\s+as\s+(.+))?$`)
-
-	// participantTypeRegex extracts the keyword (participant or actor)
-	participantTypeRegex = regexp.MustCompile(`^\s*(participant|actor)\s+`)
-
-	// messageRegex matches messages with all arrow types including activation modifiers:
-	// [From](arrow)[+|-][To]: [Label]
-	// Arrow types: ->>, -->>, ->, -->, -x, --x, -), --)
-	messageRegex = regexp.MustCompile(`^\s*(?:"([^"]+)"|([^\s\-]+))\s*(-->>|->>|-->|->|--x|-x|--\)|-\))\s*(\+|-)?(?:"([^"]+)"|([^\s:]+))\s*:\s*(.*)$`)
-
-	// autonumberRegex matches the autonumber directive
-	autonumberRegex = regexp.MustCompile(`^\s*autonumber\s*$`)
-
-	// activateRegex matches activate/deactivate directives
-	activateRegex = regexp.MustCompile(`^\s*(activate|deactivate)\s+(?:"([^"]+)"|(\S+))\s*$`)
-
-	// noteRegex matches Note directives:
-	// Note right of A: text
-	// Note left of A: text
-	// Note over A: text
-	// Note over A,B: text
-	noteRegex = regexp.MustCompile(`^\s*[Nn]ote\s+(right of|left of|over)\s+(?:"([^"]+)"|([^\s,:]+))(?:\s*,\s*(?:"([^"]+)"|([^\s:]+)))?\s*:\s*(.*)$`)
-
-	// blockStartRegex matches block start: loop text, alt text, opt text, par text, critical text, break text, rect text
-	blockStartRegex = regexp.MustCompile(`^\s*(loop|alt|opt|par|critical|break|rect)\s+(.*)$`)
-
-	// blockDividerRegex matches block dividers: else text, and text, option text
-	blockDividerRegex = regexp.MustCompile(`^\s*(else|and|option)\s*(.*)$`)
-
-	// blockEndRegex matches block end: end
-	blockEndRegex = regexp.MustCompile(`^\s*end\s*$`)
-
-	// boxRegex matches box directive: box [label] [color]
-	boxRegex = regexp.MustCompile(`^\s*box\s*(?:"([^"]+)")?(?:\s+(\S+))?\s*$`)
-
-	// boxEndRegex matches end of box grouping (same as blockEndRegex but used in box context)
-	boxEndRegex = regexp.MustCompile(`^\s*end\s*$`)
-
-	// createRegex matches create participant/actor directives
-	createRegex = regexp.MustCompile(`^\s*create\s+(?:participant|actor)\s+(?:"([^"]+)"|(\S+))(?:\s+as\s+(.+))?\s*$`)
-
-	// destroyRegex matches destroy directives
-	destroyRegex = regexp.MustCompile(`^\s*destroy\s+(?:"([^"]+)"|(\S+))\s*$`)
 )
 
 // ParticipantGroup represents a box grouping of participants.
@@ -122,7 +74,7 @@ type Message struct {
 	To         *Participant
 	Label      string
 	ArrowType  ArrowType
-	Number     int // Message number when autonumber is enabled (0 means no number)
+	Number     int  // Message number when autonumber is enabled (0 means no number)
 	Activate   bool // +  shorthand: activate target after message
 	Deactivate bool // - shorthand: deactivate source after message
 }
@@ -133,14 +85,14 @@ func (m *Message) elementType() string { return "message" }
 type ArrowType int
 
 const (
-	SolidArrow      ArrowType = iota // ->>  solid with filled arrowhead
-	DottedArrow                       // -->> dotted with filled arrowhead
-	SolidOpen                         // ->   solid with open arrowhead
-	DottedOpen                        // -->  dotted with open arrowhead
-	SolidCross                        // -x   solid with cross end
-	DottedCross                       // --x  dotted with cross end
-	SolidAsync                        // -)   solid with open arrow (async)
-	DottedAsync                       // --)  dotted with open arrow (async)
+	SolidArrow  ArrowType = iota // ->>  solid with filled arrowhead
+	DottedArrow                  // -->> dotted with filled arrowhead
+	SolidOpen                    // ->   solid with open arrowhead
+	DottedOpen                   // -->  dotted with open arrowhead
+	SolidCross                   // -x   solid with cross end
+	DottedCross                  // --x  dotted with cross end
+	SolidAsync                   // -)   solid with open arrow (async)
+	DottedAsync                  // --)  dotted with open arrow (async)
 )
 
 // String returns a human-readable name for the ArrowType.
@@ -186,10 +138,10 @@ const (
 
 // Note represents a note in the sequence diagram.
 type Note struct {
-	Position    NotePosition
-	Participant *Participant
+	Position       NotePosition
+	Participant    *Participant
 	EndParticipant *Participant // non-nil for "Note over A,B"
-	Text        string
+	Text           string
 }
 
 func (n *Note) elementType() string { return "note" }
@@ -204,7 +156,7 @@ func (a *ActivationEvent) elementType() string { return "activation" }
 
 // Block represents an interaction block (loop, alt, opt, par, critical, break, rect).
 type Block struct {
-	Type     string  // "loop", "alt", "opt", "par", "critical", "break", "rect"
+	Type     string // "loop", "alt", "opt", "par", "critical", "break", "rect"
 	Label    string
 	Elements []Element
 	Sections []*BlockSection // For alt/par/critical: additional sections (else/and/option)
@@ -231,6 +183,603 @@ func IsSequenceDiagram(input string) bool {
 	return false
 }
 
+// seqParser implements a recursive descent parser for Mermaid sequence diagram syntax.
+type seqParser struct {
+	s              *parser.Scanner
+	sd             *SequenceDiagram
+	participantMap map[string]*Participant
+}
+
+// Known arrow types ordered by length (longest first for prefix matching).
+var seqArrowOrder = []string{"-->>", "->>", "-->", "->", "--x", "-x", "--)", "-)"}
+
+var seqArrowTypes = map[string]ArrowType{
+	"-->>": DottedArrow,
+	"->>":  SolidArrow,
+	"-->":  DottedOpen,
+	"->":   SolidOpen,
+	"--x":  DottedCross,
+	"-x":   SolidCross,
+	"--)":  DottedAsync,
+	"-)":   SolidAsync,
+}
+
+// isEndAlone checks if "end" is alone on its line.
+func (p *seqParser) isEndAlone() bool {
+	tok := p.s.Peek()
+	if tok.Kind != parser.TokenIdent || tok.Text != "end" {
+		return false
+	}
+	saved := p.s.Save()
+	p.s.Next()
+	p.s.SkipWhitespace()
+	next := p.s.Peek()
+	p.s.Restore(saved)
+	return next.Kind == parser.TokenNewline || next.Kind == parser.TokenEOF
+}
+
+// parseParticipantID parses a participant identifier (ident, number, or quoted string).
+func (p *seqParser) parseParticipantID() (string, bool) {
+	tok := p.s.Peek()
+	switch tok.Kind {
+	case parser.TokenString, parser.TokenIdent, parser.TokenNumber:
+		p.s.Next()
+		return tok.Text, true
+	default:
+		return "", false
+	}
+}
+
+// parseArrow tries to parse a sequence diagram arrow from the current operator token.
+// Returns (arrowType, modifier, true) if successful.
+// The modifier is extracted from the operator text if it's embedded (e.g., "->>-").
+func (p *seqParser) parseArrow() (ArrowType, string, bool) {
+	tok := p.s.Peek()
+	if tok.Kind != parser.TokenOperator {
+		return 0, "", false
+	}
+
+	for _, arrow := range seqArrowOrder {
+		if strings.HasPrefix(tok.Text, arrow) {
+			p.s.Next()
+			modifier := tok.Text[len(arrow):]
+			return seqArrowTypes[arrow], modifier, true
+		}
+	}
+
+	return 0, "", false
+}
+
+// parseModifier checks for a +/- activation modifier token.
+func (p *seqParser) parseModifier() string {
+	tok := p.s.Peek()
+	if tok.Kind == parser.TokenText && tok.Text == "+" {
+		p.s.Next()
+		return "+"
+	}
+	if tok.Kind == parser.TokenOperator && tok.Text == "-" {
+		p.s.Next()
+		return "-"
+	}
+	return ""
+}
+
+// getParticipant returns an existing participant or auto-creates one.
+func (p *seqParser) getParticipant(id string) *Participant {
+	if pt, exists := p.participantMap[id]; exists {
+		return pt
+	}
+	pt := &Participant{
+		ID:    id,
+		Label: id,
+		Index: len(p.sd.Participants),
+	}
+	p.sd.Participants = append(p.sd.Participants, pt)
+	p.participantMap[id] = pt
+	return pt
+}
+
+// addParticipant adds a new participant, returning an error if duplicate.
+func (p *seqParser) addParticipant(id, label string, pType ParticipantType) (*Participant, error) {
+	if _, exists := p.participantMap[id]; exists {
+		return nil, fmt.Errorf("line %d: duplicate participant %q", p.s.Peek().Pos.Line, id)
+	}
+	pt := &Participant{
+		ID:    id,
+		Label: label,
+		Index: len(p.sd.Participants),
+		Type:  pType,
+	}
+	p.sd.Participants = append(p.sd.Participants, pt)
+	p.participantMap[id] = pt
+	return pt, nil
+}
+
+// parseParticipantDecl parses: (participant|actor) ID [as Label]
+func (p *seqParser) parseParticipantDecl(currentGroup *ParticipantGroup) error {
+	keyword := p.s.Next().Text // "participant" or "actor"
+	pType := ParticipantBox
+	if keyword == "actor" {
+		pType = ParticipantActor
+	}
+
+	p.s.SkipWhitespace()
+	id, ok := p.parseParticipantID()
+	if !ok {
+		return fmt.Errorf("line %d: expected participant name", p.s.Peek().Pos.Line)
+	}
+
+	label := id
+	p.s.SkipWhitespace()
+
+	// Check for "as Label"
+	if p.s.Peek().Kind == parser.TokenIdent && p.s.Peek().Text == "as" {
+		p.s.Next() // consume "as"
+		p.s.SkipWhitespace()
+		label = strings.TrimSpace(parser.CollectLineText(p.s))
+		label = strings.Trim(label, `"`)
+	}
+
+	parser.SkipToEndOfLine(p.s)
+
+	pt, err := p.addParticipant(id, label, pType)
+	if err != nil {
+		return err
+	}
+
+	if currentGroup != nil {
+		currentGroup.Participants = append(currentGroup.Participants, pt)
+	}
+	return nil
+}
+
+// tryParseMessage tries to parse a message line: FROM arrow [+|-] TO : Label
+func (p *seqParser) tryParseMessage(elements *[]Element) (*Message, error) {
+	saved := p.s.Save()
+
+	fromID, ok := p.parseParticipantID()
+	if !ok {
+		p.s.Restore(saved)
+		return nil, nil
+	}
+
+	p.s.SkipWhitespace()
+
+	arrowType, modifier, ok := p.parseArrow()
+	if !ok {
+		p.s.Restore(saved)
+		return nil, nil
+	}
+
+	p.s.SkipWhitespace()
+
+	// Check for separate modifier if not embedded in arrow
+	if modifier == "" {
+		modifier = p.parseModifier()
+	}
+
+	p.s.SkipWhitespace()
+
+	toID, ok := p.parseParticipantID()
+	if !ok {
+		p.s.Restore(saved)
+		return nil, nil
+	}
+
+	p.s.SkipWhitespace()
+
+	if p.s.Peek().Kind != parser.TokenColon {
+		p.s.Restore(saved)
+		return nil, nil
+	}
+	p.s.Next() // consume :
+
+	p.s.SkipWhitespace()
+	label := strings.TrimSpace(parser.CollectLineText(p.s))
+	if p.s.Peek().Kind == parser.TokenNewline {
+		p.s.Next()
+	}
+
+	from := p.getParticipant(fromID)
+	to := p.getParticipant(toID)
+
+	msgNumber := 0
+	if p.sd.Autonumber {
+		msgNumber = len(p.sd.Messages) + 1
+	}
+
+	msg := &Message{
+		From:       from,
+		To:         to,
+		Label:      label,
+		ArrowType:  arrowType,
+		Number:     msgNumber,
+		Activate:   modifier == "+",
+		Deactivate: modifier == "-",
+	}
+	p.sd.Messages = append(p.sd.Messages, msg)
+	*elements = append(*elements, msg)
+
+	if msg.Activate {
+		*elements = append(*elements, &ActivationEvent{Participant: to, Activate: true})
+	}
+	if msg.Deactivate {
+		*elements = append(*elements, &ActivationEvent{Participant: from, Activate: false})
+	}
+
+	return msg, nil
+}
+
+// parseNote parses: Note (right of|left of|over) participant[,participant] : text
+func (p *seqParser) parseNote() (*Note, error) {
+	p.s.Next() // consume "Note"/"note"
+	p.s.SkipWhitespace()
+
+	var pos NotePosition
+	tok := p.s.Peek()
+	if tok.Kind != parser.TokenIdent {
+		return nil, fmt.Errorf("line %d: expected note position (right, left, over)", tok.Pos.Line)
+	}
+
+	switch tok.Text {
+	case "right":
+		p.s.Next()
+		p.s.SkipWhitespace()
+		if p.s.Peek().Kind == parser.TokenIdent && p.s.Peek().Text == "of" {
+			p.s.Next() // consume "of"
+		}
+		pos = NoteRightOf
+	case "left":
+		p.s.Next()
+		p.s.SkipWhitespace()
+		if p.s.Peek().Kind == parser.TokenIdent && p.s.Peek().Text == "of" {
+			p.s.Next() // consume "of"
+		}
+		pos = NoteLeftOf
+	case "over":
+		p.s.Next()
+		pos = NoteOver
+	default:
+		return nil, fmt.Errorf("line %d: expected note position (right, left, over), got %q", tok.Pos.Line, tok.Text)
+	}
+
+	p.s.SkipWhitespace()
+
+	pID, ok := p.parseParticipantID()
+	if !ok {
+		return nil, fmt.Errorf("line %d: expected participant name in note", p.s.Peek().Pos.Line)
+	}
+
+	note := &Note{
+		Position:    pos,
+		Participant: p.getParticipant(pID),
+	}
+
+	// Check for second participant: Note over A,B
+	if p.s.Peek().Kind == parser.TokenComma {
+		p.s.Next() // consume ,
+		p.s.SkipWhitespace()
+		endID, ok := p.parseParticipantID()
+		if ok {
+			note.EndParticipant = p.getParticipant(endID)
+		}
+	}
+
+	p.s.SkipWhitespace()
+
+	// Expect colon
+	if p.s.Peek().Kind == parser.TokenColon {
+		p.s.Next()
+	}
+
+	p.s.SkipWhitespace()
+	note.Text = strings.TrimSpace(parser.CollectLineText(p.s))
+	if p.s.Peek().Kind == parser.TokenNewline {
+		p.s.Next()
+	}
+
+	return note, nil
+}
+
+// parseActivation parses: (activate|deactivate) participant
+func (p *seqParser) parseActivation() (*ActivationEvent, error) {
+	keyword := p.s.Next().Text // "activate" or "deactivate"
+	p.s.SkipWhitespace()
+
+	id, ok := p.parseParticipantID()
+	if !ok {
+		return nil, fmt.Errorf("line %d: expected participant name after %s", p.s.Peek().Pos.Line, keyword)
+	}
+	parser.SkipToEndOfLine(p.s)
+
+	return &ActivationEvent{
+		Participant: p.getParticipant(id),
+		Activate:    keyword == "activate",
+	}, nil
+}
+
+// parseCreate parses: create (participant|actor) ID [as Label]
+func (p *seqParser) parseCreate(currentGroup *ParticipantGroup) (Element, error) {
+	p.s.Next() // consume "create"
+	p.s.SkipWhitespace()
+
+	// Expect participant or actor
+	pType := ParticipantBox
+	tok := p.s.Peek()
+	if tok.Kind == parser.TokenIdent {
+		if tok.Text == "actor" {
+			pType = ParticipantActor
+		}
+		if tok.Text == "participant" || tok.Text == "actor" {
+			p.s.Next()
+		}
+	}
+
+	p.s.SkipWhitespace()
+	id, ok := p.parseParticipantID()
+	if !ok {
+		return nil, fmt.Errorf("line %d: expected participant name after create", p.s.Peek().Pos.Line)
+	}
+
+	label := id
+	p.s.SkipWhitespace()
+
+	if p.s.Peek().Kind == parser.TokenIdent && p.s.Peek().Text == "as" {
+		p.s.Next()
+		p.s.SkipWhitespace()
+		label = strings.TrimSpace(parser.CollectLineText(p.s))
+		label = strings.Trim(label, `"`)
+	}
+
+	parser.SkipToEndOfLine(p.s)
+
+	pt, err := p.addParticipant(id, label, pType)
+	if err != nil {
+		return nil, err
+	}
+
+	if currentGroup != nil {
+		currentGroup.Participants = append(currentGroup.Participants, pt)
+	}
+
+	return &CreateEvent{Participant: pt}, nil
+}
+
+// parseDestroy parses: destroy participant
+func (p *seqParser) parseDestroy() (Element, error) {
+	p.s.Next() // consume "destroy"
+	p.s.SkipWhitespace()
+
+	id, ok := p.parseParticipantID()
+	if !ok {
+		return nil, fmt.Errorf("line %d: expected participant name after destroy", p.s.Peek().Pos.Line)
+	}
+	parser.SkipToEndOfLine(p.s)
+
+	return &DestroyEvent{Participant: p.getParticipant(id)}, nil
+}
+
+// parseBox parses: box ["label"] [color]
+func (p *seqParser) parseBox() *ParticipantGroup {
+	p.s.Next() // consume "box"
+	p.s.SkipWhitespace()
+
+	label := ""
+	if p.s.Peek().Kind == parser.TokenString {
+		label = p.s.Next().Text
+	}
+	p.s.SkipWhitespace()
+	if label == "" && p.s.Peek().Kind == parser.TokenIdent {
+		label = p.s.Next().Text
+	}
+
+	parser.SkipToEndOfLine(p.s)
+
+	return &ParticipantGroup{
+		Label:        label,
+		Participants: []*Participant{},
+	}
+}
+
+// parseBlock parses: (loop|alt|opt|par|critical|break|rect) label NL elements (sections)* end
+func (p *seqParser) parseBlock() (*Block, error) {
+	keyword := p.s.Next().Text // block keyword
+	p.s.SkipWhitespace()
+	label := strings.TrimSpace(parser.CollectLineText(p.s))
+	if p.s.Peek().Kind == parser.TokenNewline {
+		p.s.Next()
+	}
+
+	block := &Block{Type: keyword, Label: label}
+
+	blockElements, err := p.parseElements(true)
+	if err != nil {
+		return nil, err
+	}
+	block.Elements = blockElements
+
+	// Parse sections (else/and/option) and end
+	for {
+		p.s.SkipNewlines()
+		if p.s.AtEnd() {
+			break
+		}
+
+		tok := p.s.Peek()
+		if tok.Kind != parser.TokenIdent {
+			break
+		}
+
+		switch tok.Text {
+		case "else", "and", "option":
+			p.s.Next() // consume divider keyword
+			p.s.SkipWhitespace()
+			sectionLabel := strings.TrimSpace(parser.CollectLineText(p.s))
+			if p.s.Peek().Kind == parser.TokenNewline {
+				p.s.Next()
+			}
+			section := &BlockSection{Label: sectionLabel}
+			sectionElements, err := p.parseElements(true)
+			if err != nil {
+				return nil, err
+			}
+			section.Elements = sectionElements
+			block.Sections = append(block.Sections, section)
+
+		case "end":
+			if p.isEndAlone() {
+				p.s.Next()
+				parser.SkipToEndOfLine(p.s)
+			}
+			return block, nil
+
+		default:
+			return block, nil
+		}
+	}
+
+	return block, nil
+}
+
+// isBlockKeyword returns true if the identifier is a block start keyword.
+func isBlockKeyword(text string) bool {
+	switch text {
+	case "loop", "alt", "opt", "par", "critical", "break", "rect":
+		return true
+	}
+	return false
+}
+
+// parseElements parses sequence diagram elements until end/divider/EOF.
+func (p *seqParser) parseElements(inBlock bool) ([]Element, error) {
+	var elements []Element
+	var currentGroup *ParticipantGroup
+
+	for {
+		p.s.SkipNewlines()
+		if p.s.AtEnd() {
+			return elements, nil
+		}
+
+		tok := p.s.Peek()
+
+		// Handle "end" keyword
+		if tok.Kind == parser.TokenIdent && tok.Text == "end" && p.isEndAlone() {
+			if currentGroup != nil && !inBlock {
+				// Close box group
+				p.sd.Groups = append(p.sd.Groups, currentGroup)
+				currentGroup = nil
+				p.s.Next()
+				parser.SkipToEndOfLine(p.s)
+				continue
+			}
+			if inBlock {
+				return elements, nil // don't consume — caller handles
+			}
+			// Stray "end" at top level — skip
+			p.s.Next()
+			parser.SkipToEndOfLine(p.s)
+			continue
+		}
+
+		// Handle block dividers (only in block context)
+		if inBlock && tok.Kind == parser.TokenIdent {
+			if tok.Text == "else" || tok.Text == "and" || tok.Text == "option" {
+				return elements, nil // don't consume — caller handles
+			}
+		}
+
+		if tok.Kind != parser.TokenIdent && tok.Kind != parser.TokenString {
+			// Try as message anyway (in case of quoted participant)
+			if tok.Kind == parser.TokenString {
+				msg, err := p.tryParseMessage(&elements)
+				if err != nil {
+					return nil, err
+				}
+				if msg != nil {
+					continue
+				}
+			}
+			parser.SkipToEndOfLine(p.s)
+			continue
+		}
+
+		// Dispatch on keyword
+		if tok.Kind == parser.TokenIdent {
+			switch {
+			case tok.Text == "autonumber":
+				p.sd.Autonumber = true
+				p.s.Next()
+				parser.SkipToEndOfLine(p.s)
+				continue
+
+			case tok.Text == "participant" || tok.Text == "actor":
+				if err := p.parseParticipantDecl(currentGroup); err != nil {
+					return nil, err
+				}
+				continue
+
+			case tok.Text == "box" && !inBlock:
+				currentGroup = p.parseBox()
+				continue
+
+			case tok.Text == "create":
+				elem, err := p.parseCreate(currentGroup)
+				if err != nil {
+					return nil, err
+				}
+				elements = append(elements, elem)
+				continue
+
+			case tok.Text == "destroy":
+				elem, err := p.parseDestroy()
+				if err != nil {
+					return nil, err
+				}
+				elements = append(elements, elem)
+				continue
+
+			case tok.Text == "activate" || tok.Text == "deactivate":
+				elem, err := p.parseActivation()
+				if err != nil {
+					return nil, err
+				}
+				elements = append(elements, elem)
+				continue
+
+			case strings.EqualFold(tok.Text, "note"):
+				note, err := p.parseNote()
+				if err != nil {
+					return nil, err
+				}
+				elements = append(elements, note)
+				continue
+
+			case isBlockKeyword(tok.Text):
+				block, err := p.parseBlock()
+				if err != nil {
+					return nil, err
+				}
+				elements = append(elements, block)
+				continue
+			}
+		}
+
+		// Try to parse as message (FROM arrow TO : Label)
+		msg, err := p.tryParseMessage(&elements)
+		if err != nil {
+			return nil, err
+		}
+		if msg != nil {
+			continue
+		}
+
+		// Unrecognized line — error
+		return nil, fmt.Errorf("line %d: invalid syntax: %q",
+			tok.Pos.Line, strings.TrimSpace(parser.CollectLineText(p.s)))
+	}
+}
+
 // Parse parses Mermaid sequence diagram text into a SequenceDiagram model.
 func Parse(input string) (*SequenceDiagram, error) {
 	input = strings.TrimSpace(input)
@@ -238,16 +787,21 @@ func Parse(input string) (*SequenceDiagram, error) {
 		return nil, fmt.Errorf("empty input")
 	}
 
-	rawLines := diagram.SplitLines(input)
-	lines := diagram.RemoveComments(rawLines)
-	if len(lines) == 0 {
+	s := parser.NewScanner(input)
+
+	// Skip whitespace/newlines to find the keyword
+	s.SkipNewlines()
+	if s.AtEnd() {
 		return nil, fmt.Errorf("no content found")
 	}
 
-	if !strings.HasPrefix(strings.TrimSpace(lines[0]), SequenceDiagramKeyword) {
+	// Expect "sequenceDiagram" keyword
+	tok := s.Peek()
+	if tok.Kind != parser.TokenIdent || tok.Text != SequenceDiagramKeyword {
 		return nil, fmt.Errorf("expected %q keyword", SequenceDiagramKeyword)
 	}
-	lines = lines[1:]
+	s.Next()
+	parser.SkipToEndOfLine(s)
 
 	sd := &SequenceDiagram{
 		Participants: []*Participant{},
@@ -256,9 +810,14 @@ func Parse(input string) (*SequenceDiagram, error) {
 		Autonumber:   false,
 		Groups:       []*ParticipantGroup{},
 	}
-	participantMap := make(map[string]*Participant)
 
-	elements, _, err := sd.parseLines(lines, participantMap, 0, false)
+	p := &seqParser{
+		s:              s,
+		sd:             sd,
+		participantMap: make(map[string]*Participant),
+	}
+
+	elements, err := p.parseElements(false)
 	if err != nil {
 		return nil, err
 	}
@@ -269,361 +828,4 @@ func Parse(input string) (*SequenceDiagram, error) {
 	}
 
 	return sd, nil
-}
-
-// parseLines parses a slice of lines and returns elements. When inBlock is true,
-// it stops at "end" or block dividers (else/and/option).
-func (sd *SequenceDiagram) parseLines(lines []string, participantMap map[string]*Participant, startLine int, inBlock bool) ([]Element, int, error) {
-	var elements []Element
-	var currentGroup *ParticipantGroup // tracks current box group
-	i := 0
-	for i < len(lines) {
-		line := lines[i]
-		trimmed := strings.TrimSpace(line)
-		lineNum := startLine + i + 2
-
-		if trimmed == "" {
-			i++
-			continue
-		}
-
-		// Check for autonumber directive
-		if autonumberRegex.MatchString(trimmed) {
-			sd.Autonumber = true
-			i++
-			continue
-		}
-
-		// Check for box end (end while in a box group context, but NOT in a block)
-		if currentGroup != nil && boxEndRegex.MatchString(trimmed) {
-			sd.Groups = append(sd.Groups, currentGroup)
-			currentGroup = nil
-			i++
-			continue
-		}
-
-		// Check for block end
-		if inBlock && blockEndRegex.MatchString(trimmed) {
-			return elements, i, nil
-		}
-
-		// Check for block dividers (else/and/option) - only valid inside a block
-		if inBlock && blockDividerRegex.MatchString(trimmed) {
-			return elements, i, nil
-		}
-
-		// Check for box directive (participant grouping)
-		if match := boxRegex.FindStringSubmatch(trimmed); match != nil && !inBlock {
-			label := match[1] // quoted label
-			if label == "" {
-				label = match[2] // unquoted color/label
-			}
-			currentGroup = &ParticipantGroup{
-				Label:        label,
-				Participants: []*Participant{},
-			}
-			i++
-			continue
-		}
-
-		// Check for create participant/actor
-		if match := createRegex.FindStringSubmatch(trimmed); match != nil {
-			id := match[2]
-			if match[1] != "" {
-				id = match[1]
-			}
-			label := match[3]
-			if label == "" {
-				label = id
-			}
-			label = strings.Trim(label, `"`)
-
-			// Determine participant type
-			pType := ParticipantBox
-			if strings.Contains(trimmed, "create actor") {
-				pType = ParticipantActor
-			}
-
-			if _, exists := participantMap[id]; exists {
-				return nil, 0, fmt.Errorf("line %d: duplicate participant %q", lineNum, id)
-			}
-
-			p := &Participant{
-				ID:    id,
-				Label: label,
-				Index: len(sd.Participants),
-				Type:  pType,
-			}
-			sd.Participants = append(sd.Participants, p)
-			participantMap[id] = p
-
-			if currentGroup != nil {
-				currentGroup.Participants = append(currentGroup.Participants, p)
-			}
-
-			elements = append(elements, &CreateEvent{Participant: p})
-			i++
-			continue
-		}
-
-		// Check for destroy
-		if match := destroyRegex.FindStringSubmatch(trimmed); match != nil {
-			id := match[2]
-			if match[1] != "" {
-				id = match[1]
-			}
-			p := sd.getParticipant(id, participantMap)
-			elements = append(elements, &DestroyEvent{Participant: p})
-			i++
-			continue
-		}
-
-		// Check for block start
-		if match := blockStartRegex.FindStringSubmatch(trimmed); match != nil {
-			block := &Block{
-				Type:  match[1],
-				Label: strings.TrimSpace(match[2]),
-			}
-			i++
-			// Parse elements within this block
-			blockElements, consumed, err := sd.parseLines(lines[i:], participantMap, startLine+i, true)
-			if err != nil {
-				return nil, 0, err
-			}
-			block.Elements = blockElements
-			i += consumed
-
-			// Parse additional sections (else/and/option)
-			for i < len(lines) {
-				divTrimmed := strings.TrimSpace(lines[i])
-				if blockDividerRegex.MatchString(divTrimmed) {
-					divMatch := blockDividerRegex.FindStringSubmatch(divTrimmed)
-					section := &BlockSection{
-						Label: strings.TrimSpace(divMatch[2]),
-					}
-					i++
-					sectionElements, consumed2, err := sd.parseLines(lines[i:], participantMap, startLine+i, true)
-					if err != nil {
-						return nil, 0, err
-					}
-					section.Elements = sectionElements
-					block.Sections = append(block.Sections, section)
-					i += consumed2
-				} else if blockEndRegex.MatchString(divTrimmed) {
-					i++ // consume the "end"
-					break
-				} else {
-					break
-				}
-			}
-			elements = append(elements, block)
-			continue
-		}
-
-		// Check for activate/deactivate
-		if match := activateRegex.FindStringSubmatch(trimmed); match != nil {
-			id := match[3]
-			if match[2] != "" {
-				id = match[2]
-			}
-			p := sd.getParticipant(id, participantMap)
-			event := &ActivationEvent{
-				Participant: p,
-				Activate:    match[1] == "activate",
-			}
-			elements = append(elements, event)
-			i++
-			continue
-		}
-
-		// Check for note
-		if match := noteRegex.FindStringSubmatch(trimmed); match != nil {
-			posStr := match[1]
-			pID := match[3]
-			if match[2] != "" {
-				pID = match[2]
-			}
-			text := strings.TrimSpace(match[6])
-
-			p := sd.getParticipant(pID, participantMap)
-
-			var pos NotePosition
-			switch posStr {
-			case "right of":
-				pos = NoteRightOf
-			case "left of":
-				pos = NoteLeftOf
-			case "over":
-				pos = NoteOver
-			}
-
-			note := &Note{
-				Position:    pos,
-				Participant: p,
-				Text:        text,
-			}
-
-			// Check for second participant in "Note over A,B"
-			endID := match[5]
-			if match[4] != "" {
-				endID = match[4]
-			}
-			if endID != "" {
-				note.EndParticipant = sd.getParticipant(endID, participantMap)
-			}
-
-			elements = append(elements, note)
-			i++
-			continue
-		}
-
-		if matched, err := sd.parseParticipant(trimmed, participantMap); err != nil {
-			return nil, 0, fmt.Errorf("line %d: %w", lineNum, err)
-		} else if matched {
-			// If we're inside a box group, add this participant to it
-			if currentGroup != nil {
-				currentGroup.Participants = append(currentGroup.Participants, sd.Participants[len(sd.Participants)-1])
-			}
-			i++
-			continue
-		}
-
-		if matched, err := sd.parseMessage(trimmed, participantMap, &elements); err != nil {
-			return nil, 0, fmt.Errorf("line %d: %w", lineNum, err)
-		} else if matched {
-			i++
-			continue
-		}
-
-		return nil, 0, fmt.Errorf("line %d: invalid syntax: %q", lineNum, trimmed)
-	}
-
-	return elements, i, nil
-}
-
-func (sd *SequenceDiagram) parseParticipant(line string, participants map[string]*Participant) (bool, error) {
-	match := participantRegex.FindStringSubmatch(line)
-	if match == nil {
-		return false, nil
-	}
-
-	// Determine participant type
-	pType := ParticipantBox
-	if typeMatch := participantTypeRegex.FindStringSubmatch(line); typeMatch != nil {
-		if typeMatch[1] == "actor" {
-			pType = ParticipantActor
-		}
-	}
-
-	id := match[2]
-	if match[1] != "" {
-		id = match[1]
-	}
-	label := match[3]
-	if label == "" {
-		label = id
-	}
-	label = strings.Trim(label, `"`)
-
-	if _, exists := participants[id]; exists {
-		return true, fmt.Errorf("duplicate participant %q", id)
-	}
-
-	p := &Participant{
-		ID:    id,
-		Label: label,
-		Index: len(sd.Participants),
-		Type:  pType,
-	}
-	sd.Participants = append(sd.Participants, p)
-	participants[id] = p
-	return true, nil
-}
-
-func (sd *SequenceDiagram) parseMessage(line string, participants map[string]*Participant, elements *[]Element) (bool, error) {
-	match := messageRegex.FindStringSubmatch(line)
-	if match == nil {
-		return false, nil
-	}
-
-	fromID := match[2]
-	if match[1] != "" {
-		fromID = match[1]
-	}
-
-	arrow := match[3]
-
-	activationMod := match[4] // "+" or "-" or ""
-
-	toID := match[6]
-	if match[5] != "" {
-		toID = match[5]
-	}
-
-	label := strings.TrimSpace(match[7])
-
-	from := sd.getParticipant(fromID, participants)
-	to := sd.getParticipant(toID, participants)
-
-	var aType ArrowType
-	switch arrow {
-	case "->>":
-		aType = SolidArrow
-	case "-->>":
-		aType = DottedArrow
-	case "->":
-		aType = SolidOpen
-	case "-->":
-		aType = DottedOpen
-	case "-x":
-		aType = SolidCross
-	case "--x":
-		aType = DottedCross
-	case "-)":
-		aType = SolidAsync
-	case "--)":
-		aType = DottedAsync
-	}
-
-	msgNumber := 0
-	if sd.Autonumber {
-		msgNumber = len(sd.Messages) + 1
-	}
-
-	msg := &Message{
-		From:       from,
-		To:         to,
-		Label:      label,
-		ArrowType:  aType,
-		Number:     msgNumber,
-		Activate:   activationMod == "+",
-		Deactivate: activationMod == "-",
-	}
-	sd.Messages = append(sd.Messages, msg)
-	*elements = append(*elements, msg)
-
-	// Generate activation/deactivation events from +/- shorthand
-	if msg.Activate {
-		*elements = append(*elements, &ActivationEvent{Participant: to, Activate: true})
-	}
-	if msg.Deactivate {
-		*elements = append(*elements, &ActivationEvent{Participant: from, Activate: false})
-	}
-
-	return true, nil
-}
-
-func (sd *SequenceDiagram) getParticipant(id string, participants map[string]*Participant) *Participant {
-	if p, exists := participants[id]; exists {
-		return p
-	}
-
-	p := &Participant{
-		ID:    id,
-		Label: id,
-		Index: len(sd.Participants),
-	}
-	sd.Participants = append(sd.Participants, p)
-	participants[id] = p
-	return p
 }
