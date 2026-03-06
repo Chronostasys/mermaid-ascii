@@ -341,14 +341,20 @@ func mergeLegendRight(lines []string, legend []string, chartRightEdge int) []str
 			break
 		}
 		line := lines[lineIdx]
-		// Pad line to chart right edge
-		if len(line) < chartRightEdge {
-			line += strings.Repeat(" ", chartRightEdge-len(line))
+		// Pad line to chart right edge using display width (rune count, not byte count)
+		displayWidth := runeWidth(line)
+		if displayWidth < chartRightEdge {
+			line += strings.Repeat(" ", chartRightEdge-displayWidth)
 		}
 		lines[lineIdx] = line + strings.Repeat(" ", legendGap) + legendRow
 	}
 
 	return lines
+}
+
+// runeWidth returns the display width of a string (rune count, not byte count).
+func runeWidth(s string) int {
+	return len([]rune(s))
 }
 
 func verticalLabelRows(labels []string, dataCount, barWidth int, prefix string) []string {
