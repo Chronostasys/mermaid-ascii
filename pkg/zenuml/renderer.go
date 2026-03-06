@@ -189,7 +189,10 @@ func renderCallMessage(msg *Message, ly *layout, chars BoxChars) []string {
 	from := ly.centers[msg.From.Index]
 	to := ly.centers[msg.To.Index]
 
-	label := msg.Method + "(" + msg.Args + ")"
+	label := msg.Label
+	if label == "" {
+		label = msg.Method + "(" + msg.Args + ")"
+	}
 	if msg.Type == AsyncMessage {
 		label = "(async) " + label
 	}

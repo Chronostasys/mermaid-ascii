@@ -360,9 +360,9 @@ func TestIsReservedWord(t *testing.T) {
 		{"zenuml", true},
 		{"ZenUML", true},
 		{"ZENUML", true},
-		{"if", false},
-		{"else", false},
-		{"loop", false},
+		{"if", true},
+		{"else", true},
+		{"loop", true},
 		{"Client", false},
 		{"server", false},
 		{"process", false},
@@ -612,5 +612,456 @@ server.forward()
 	// Should contain the arrow character
 	if !strings.ContainsRune(result, '\u25ba') {
 		t.Error("expected Unicode right arrow character in output")
+	}
+}
+
+// --- Tests for new syntax features ---
+
+func TestParseArrowMessage(t *testing.T) {
+	input := `zenuml
+Alice->John: Hello John, how are you?
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Participants) != 2 {
+		t.Fatalf("expected 2 participants, got %d", len(d.Participants))
+	}
+	if d.Participants[0].ID != "Alice" {
+		t.Errorf("expected participant 'Alice', got %q", d.Participants[0].ID)
+	}
+	if d.Participants[1].ID != "John" {
+		t.Errorf("expected participant 'John', got %q", d.Participants[1].ID)
+	}
+	if len(d.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(d.Messages))
+	}
+	msg := d.Messages[0]
+	if msg.Type != SyncMessage {
+		t.Errorf("expected SyncMessage, got %v", msg.Type)
+	}
+	if msg.From.ID != "Alice" {
+		t.Errorf("expected from 'Alice', got %q", msg.From.ID)
+	}
+	if msg.To.ID != "John" {
+		t.Errorf("expected to 'John', got %q", msg.To.ID)
+	}
+	if msg.Label != "Hello John, how are you?" {
+		t.Errorf("expected label 'Hello John, how are you?', got %q", msg.Label)
+	}
+}
+
+func TestRenderArrowMessage(t *testing.T) {
+	input := `zenuml
+Alice->John: Hello John, how are you?
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	config := diagram.NewTestConfig(false, "cli")
+	result, err := Render(d, config)
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+	if !strings.Contains(result, "Hello John, how are you?") {
+		t.Error("expected output to contain arrow message label")
+	}
+}
+
+func TestParseArrowBlockMessage(t *testing.T) {
+	input := `zenuml
+Alice->John: Do something {
+  return done
+}
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(d.Messages))
+	}
+	msg := d.Messages[0]
+	if msg.Type != AsyncMessage {
+		t.Errorf("expected AsyncMessage, got %v", msg.Type)
+	}
+	if msg.Label != "Do something" {
+		t.Errorf("expected label 'Do something', got %q", msg.Label)
+	}
+	if len(msg.Nested) != 1 {
+		t.Fatalf("expected 1 nested message, got %d", len(msg.Nested))
+	}
+	if msg.Nested[0].Type != ReturnMessage {
+		t.Errorf("expected nested ReturnMessage, got %v", msg.Nested[0].Type)
+	}
+}
+
+func TestParseStandaloneParticipant(t *testing.T) {
+	input := `zenuml
+Bob
+Alice
+Bob->Alice: Hi
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Participants) != 2 {
+		t.Fatalf("expected 2 participants, got %d", len(d.Participants))
+	}
+	if d.Participants[0].ID != "Bob" {
+		t.Errorf("expected 'Bob', got %q", d.Participants[0].ID)
+	}
+	if d.Participants[0].TypeName != "Bob" {
+		t.Errorf("expected TypeName 'Bob', got %q", d.Participants[0].TypeName)
+	}
+	if d.Participants[1].ID != "Alice" {
+		t.Errorf("expected 'Alice', got %q", d.Participants[1].ID)
+	}
+}
+
+func TestParseAlias(t *testing.T) {
+	input := `zenuml
+A as Alice
+B as Bob
+A->B: Hello
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Participants) != 2 {
+		t.Fatalf("expected 2 participants, got %d", len(d.Participants))
+	}
+	if d.Participants[0].ID != "A" {
+		t.Errorf("expected ID 'A', got %q", d.Participants[0].ID)
+	}
+	if d.Participants[0].TypeName != "Alice" {
+		t.Errorf("expected TypeName 'Alice', got %q", d.Participants[0].TypeName)
+	}
+	if d.Participants[1].ID != "B" {
+		t.Errorf("expected ID 'B', got %q", d.Participants[1].ID)
+	}
+	if d.Participants[1].TypeName != "Bob" {
+		t.Errorf("expected TypeName 'Bob', got %q", d.Participants[1].TypeName)
+	}
+}
+
+func TestParseAnnotator(t *testing.T) {
+	input := `zenuml
+@Actor Alice
+@Database Bob
+Alice->Bob: query
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Participants) != 2 {
+		t.Fatalf("expected 2 participants, got %d", len(d.Participants))
+	}
+	if d.Participants[0].ID != "Alice" {
+		t.Errorf("expected ID 'Alice', got %q", d.Participants[0].ID)
+	}
+	if d.Participants[0].TypeName != "Actor" {
+		t.Errorf("expected TypeName 'Actor', got %q", d.Participants[0].TypeName)
+	}
+	if d.Participants[1].ID != "Bob" {
+		t.Errorf("expected ID 'Bob', got %q", d.Participants[1].ID)
+	}
+	if d.Participants[1].TypeName != "Database" {
+		t.Errorf("expected TypeName 'Database', got %q", d.Participants[1].TypeName)
+	}
+}
+
+func TestParseWhileBlock(t *testing.T) {
+	input := `zenuml
+Client client
+Server server
+while(hasMore) {
+  server.fetch()
+}
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(d.Messages))
+	}
+	if d.Messages[0].Method != "fetch" {
+		t.Errorf("expected method 'fetch', got %q", d.Messages[0].Method)
+	}
+}
+
+func TestParseIfElseBlock(t *testing.T) {
+	input := `zenuml
+Client client
+Server server
+if(condition) {
+  server.doA()
+} else {
+  server.doB()
+}
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Messages) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(d.Messages))
+	}
+	if d.Messages[0].Method != "doA" {
+		t.Errorf("expected method 'doA', got %q", d.Messages[0].Method)
+	}
+	if d.Messages[1].Method != "doB" {
+		t.Errorf("expected method 'doB', got %q", d.Messages[1].Method)
+	}
+}
+
+func TestParseTryCatchFinallyBlock(t *testing.T) {
+	input := `zenuml
+Client client
+Server server
+try {
+  server.riskyOp()
+} catch {
+  server.handleError()
+} finally {
+  server.cleanup()
+}
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Messages) != 3 {
+		t.Fatalf("expected 3 messages, got %d", len(d.Messages))
+	}
+	if d.Messages[0].Method != "riskyOp" {
+		t.Errorf("expected 'riskyOp', got %q", d.Messages[0].Method)
+	}
+	if d.Messages[1].Method != "handleError" {
+		t.Errorf("expected 'handleError', got %q", d.Messages[1].Method)
+	}
+	if d.Messages[2].Method != "cleanup" {
+		t.Errorf("expected 'cleanup', got %q", d.Messages[2].Method)
+	}
+}
+
+func TestParseOptBlock(t *testing.T) {
+	input := `zenuml
+Client client
+Server server
+opt {
+  server.optional()
+}
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(d.Messages))
+	}
+	if d.Messages[0].Method != "optional" {
+		t.Errorf("expected 'optional', got %q", d.Messages[0].Method)
+	}
+}
+
+func TestParseParBlock(t *testing.T) {
+	input := `zenuml
+Client client
+Server server
+par {
+  server.parallel()
+}
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(d.Messages))
+	}
+	if d.Messages[0].Method != "parallel" {
+		t.Errorf("expected 'parallel', got %q", d.Messages[0].Method)
+	}
+}
+
+func TestParseNewKeyword(t *testing.T) {
+	input := `zenuml
+Client client
+new Server
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Participants) != 2 {
+		t.Fatalf("expected 2 participants, got %d", len(d.Participants))
+	}
+	if d.Participants[1].ID != "Server" {
+		t.Errorf("expected participant 'Server', got %q", d.Participants[1].ID)
+	}
+	if len(d.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(d.Messages))
+	}
+	msg := d.Messages[0]
+	if msg.Method != "new" {
+		t.Errorf("expected method 'new', got %q", msg.Method)
+	}
+	if msg.To.ID != "Server" {
+		t.Errorf("expected to 'Server', got %q", msg.To.ID)
+	}
+}
+
+func TestParseNewKeywordWithArgs(t *testing.T) {
+	input := `zenuml
+Client client
+new Server(host, port)
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(d.Messages))
+	}
+	msg := d.Messages[0]
+	if msg.Args != "host, port" {
+		t.Errorf("expected args 'host, port', got %q", msg.Args)
+	}
+}
+
+func TestParseForLoopBlock(t *testing.T) {
+	input := `zenuml
+Client client
+Server server
+for(i in items) {
+  server.process()
+}
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(d.Messages))
+	}
+}
+
+func TestParseForEachLoopBlock(t *testing.T) {
+	input := `zenuml
+Client client
+Server server
+forEach(item) {
+  server.handle()
+}
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(d.Messages))
+	}
+}
+
+func TestParseLoopBlock(t *testing.T) {
+	input := `zenuml
+Client client
+Server server
+loop(forever) {
+  server.ping()
+}
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(d.Messages))
+	}
+}
+
+func TestParseNestedControlFlow(t *testing.T) {
+	input := `zenuml
+Client client
+Server server
+if(x) {
+  while(y) {
+    server.inner()
+  }
+}
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(d.Messages))
+	}
+	if d.Messages[0].Method != "inner" {
+		t.Errorf("expected 'inner', got %q", d.Messages[0].Method)
+	}
+}
+
+func TestStandaloneParticipantNotKeyword(t *testing.T) {
+	// Reserved words should not be treated as standalone participants
+	input := `zenuml
+Alice
+Alice->Alice: self
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Participants) != 1 {
+		t.Fatalf("expected 1 participant, got %d", len(d.Participants))
+	}
+	if d.Participants[0].ID != "Alice" {
+		t.Errorf("expected 'Alice', got %q", d.Participants[0].ID)
+	}
+}
+
+func TestIsReservedWordExtended(t *testing.T) {
+	// Test newly added reserved words
+	reserved := []string{"while", "if", "for", "forEach", "loop", "opt", "par", "try", "new", "else", "catch", "finally"}
+	for _, word := range reserved {
+		if !isReservedWord(word) {
+			t.Errorf("expected %q to be reserved", word)
+		}
+	}
+}
+
+func TestParseMixedSyntax(t *testing.T) {
+	// Mix old-style and new-style syntax
+	input := `zenuml
+@Actor Alice
+@Database DB
+Alice->DB: query data
+DB.execute(sql)
+return results
+`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Participants) != 2 {
+		t.Fatalf("expected 2 participants, got %d", len(d.Participants))
+	}
+	if len(d.Messages) != 3 {
+		t.Fatalf("expected 3 messages, got %d", len(d.Messages))
+	}
+	// First message is arrow style
+	if d.Messages[0].Label != "query data" {
+		t.Errorf("expected label 'query data', got %q", d.Messages[0].Label)
+	}
+	// Second message is dot style
+	if d.Messages[1].Method != "execute" {
+		t.Errorf("expected method 'execute', got %q", d.Messages[1].Method)
 	}
 }

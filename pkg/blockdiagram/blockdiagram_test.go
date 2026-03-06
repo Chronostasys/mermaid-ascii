@@ -407,6 +407,282 @@ func TestParseNotBlockBeta(t *testing.T) {
 	}
 }
 
+// === New feature tests ===
+
+func TestParseMultiBlockPerLine(t *testing.T) {
+	input := `block-beta
+    columns 3
+    a b c d`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Blocks) != 4 {
+		t.Fatalf("expected 4 blocks, got %d", len(d.Blocks))
+	}
+	expectedIDs := []string{"a", "b", "c", "d"}
+	for i, exp := range expectedIDs {
+		if d.Blocks[i].ID != exp {
+			t.Errorf("block %d: expected ID %q, got %q", i, exp, d.Blocks[i].ID)
+		}
+		// When no label syntax, label equals ID
+		if d.Blocks[i].Label != exp {
+			t.Errorf("block %d: expected label %q, got %q", i, exp, d.Blocks[i].Label)
+		}
+	}
+}
+
+func TestParseMultiBlockPerLineWithLabels(t *testing.T) {
+	input := `block-beta
+    columns 2
+    A["First"] B["Second"]`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Blocks) != 2 {
+		t.Fatalf("expected 2 blocks, got %d", len(d.Blocks))
+	}
+	if d.Blocks[0].Label != "First" {
+		t.Errorf("expected label 'First', got %q", d.Blocks[0].Label)
+	}
+	if d.Blocks[1].Label != "Second" {
+		t.Errorf("expected label 'Second', got %q", d.Blocks[1].Label)
+	}
+}
+
+func TestParseSpaceKeyword(t *testing.T) {
+	input := `block-beta
+    columns 3
+    a space b`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Blocks) != 3 {
+		t.Fatalf("expected 3 blocks, got %d", len(d.Blocks))
+	}
+	if d.Blocks[0].ID != "a" {
+		t.Errorf("block 0: expected ID 'a', got %q", d.Blocks[0].ID)
+	}
+	if !d.Blocks[1].IsSpace {
+		t.Error("block 1: expected IsSpace=true")
+	}
+	if d.Blocks[1].Label != "" {
+		t.Errorf("block 1: expected empty label, got %q", d.Blocks[1].Label)
+	}
+	if d.Blocks[2].ID != "b" {
+		t.Errorf("block 2: expected ID 'b', got %q", d.Blocks[2].ID)
+	}
+}
+
+func TestParseSpaceWithSpan(t *testing.T) {
+	input := `block-beta
+    columns 4
+    a space:3`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Blocks) != 2 {
+		t.Fatalf("expected 2 blocks, got %d", len(d.Blocks))
+	}
+	if !d.Blocks[1].IsSpace {
+		t.Error("block 1: expected IsSpace=true")
+	}
+	if d.Blocks[1].Span != 3 {
+		t.Errorf("block 1: expected span 3, got %d", d.Blocks[1].Span)
+	}
+}
+
+func TestParseEdgeSyntaxWithLabels(t *testing.T) {
+	input := `block-beta
+    A["Start"] --> B["Stop"]`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Blocks) != 2 {
+		t.Fatalf("expected 2 blocks, got %d", len(d.Blocks))
+	}
+	if d.Blocks[0].ID != "A" {
+		t.Errorf("block 0: expected ID 'A', got %q", d.Blocks[0].ID)
+	}
+	if d.Blocks[0].Label != "Start" {
+		t.Errorf("block 0: expected label 'Start', got %q", d.Blocks[0].Label)
+	}
+	if d.Blocks[1].ID != "B" {
+		t.Errorf("block 1: expected ID 'B', got %q", d.Blocks[1].ID)
+	}
+	if d.Blocks[1].Label != "Stop" {
+		t.Errorf("block 1: expected label 'Stop', got %q", d.Blocks[1].Label)
+	}
+}
+
+func TestParseEdgeSyntaxSimpleIDs(t *testing.T) {
+	input := `block-beta
+    A --> B`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Blocks) != 2 {
+		t.Fatalf("expected 2 blocks, got %d", len(d.Blocks))
+	}
+	if d.Blocks[0].ID != "A" {
+		t.Errorf("block 0: expected ID 'A', got %q", d.Blocks[0].ID)
+	}
+	if d.Blocks[1].ID != "B" {
+		t.Errorf("block 1: expected ID 'B', got %q", d.Blocks[1].ID)
+	}
+}
+
+func TestParseEdgeSyntaxWithEdgeLabel(t *testing.T) {
+	input := `block-beta
+    A -- "label text" --> B`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Blocks) != 2 {
+		t.Fatalf("expected 2 blocks, got %d", len(d.Blocks))
+	}
+	if d.Blocks[0].ID != "A" {
+		t.Errorf("block 0: expected ID 'A', got %q", d.Blocks[0].ID)
+	}
+	if d.Blocks[1].ID != "B" {
+		t.Errorf("block 1: expected ID 'B', got %q", d.Blocks[1].ID)
+	}
+}
+
+func TestParseStadiumShape(t *testing.T) {
+	input := `block-beta
+    a(["Stadium Label"])`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Blocks) != 1 {
+		t.Fatalf("expected 1 block, got %d", len(d.Blocks))
+	}
+	if d.Blocks[0].Label != "Stadium Label" {
+		t.Errorf("expected label 'Stadium Label', got %q", d.Blocks[0].Label)
+	}
+}
+
+func TestParseSubroutineShape(t *testing.T) {
+	input := `block-beta
+    a[["Subroutine Label"]]`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Blocks) != 1 {
+		t.Fatalf("expected 1 block, got %d", len(d.Blocks))
+	}
+	if d.Blocks[0].Label != "Subroutine Label" {
+		t.Errorf("expected label 'Subroutine Label', got %q", d.Blocks[0].Label)
+	}
+}
+
+func TestParseCylinderShape(t *testing.T) {
+	input := `block-beta
+    a[("Cylinder Label")]`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Blocks) != 1 {
+		t.Fatalf("expected 1 block, got %d", len(d.Blocks))
+	}
+	if d.Blocks[0].Label != "Cylinder Label" {
+		t.Errorf("expected label 'Cylinder Label', got %q", d.Blocks[0].Label)
+	}
+}
+
+func TestParseCircleShape(t *testing.T) {
+	input := `block-beta
+    a(("Circle Label"))`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Blocks) != 1 {
+		t.Fatalf("expected 1 block, got %d", len(d.Blocks))
+	}
+	if d.Blocks[0].Label != "Circle Label" {
+		t.Errorf("expected label 'Circle Label', got %q", d.Blocks[0].Label)
+	}
+}
+
+func TestRenderSpaceBlock(t *testing.T) {
+	input := `block-beta
+    columns 3
+    a["A"] space b["B"]`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	config := diagram.NewTestConfig(false, "cli")
+	result, err := Render(d, config)
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+	if !strings.Contains(result, "A") {
+		t.Error("expected output to contain 'A'")
+	}
+	if !strings.Contains(result, "B") {
+		t.Error("expected output to contain 'B'")
+	}
+	// The space block should not have box characters in its column
+	lines := strings.Split(strings.TrimSpace(result), "\n")
+	if len(lines) < 3 {
+		t.Fatalf("expected at least 3 lines, got %d", len(lines))
+	}
+}
+
+func TestTokenizeBlockLine(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected []string
+	}{
+		{`a b c`, []string{"a", "b", "c"}},
+		{`A["text with spaces"] B`, []string{`A["text with spaces"]`, "B"}},
+		{`a space b`, []string{"a", "space", "b"}},
+		{`a(["stadium"]) b[["sub"]]`, []string{`a(["stadium"])`, `b[["sub"]]`}},
+	}
+	for _, tt := range tests {
+		got := tokenizeBlockLine(tt.input)
+		if len(got) != len(tt.expected) {
+			t.Errorf("tokenizeBlockLine(%q): got %v, want %v", tt.input, got, tt.expected)
+			continue
+		}
+		for i := range got {
+			if got[i] != tt.expected[i] {
+				t.Errorf("tokenizeBlockLine(%q)[%d]: got %q, want %q", tt.input, i, got[i], tt.expected[i])
+			}
+		}
+	}
+}
+
+func TestParseSpaceOnOwnLine(t *testing.T) {
+	input := `block-beta
+    columns 2
+    a
+    space
+    b`
+	d, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if len(d.Blocks) != 3 {
+		t.Fatalf("expected 3 blocks, got %d", len(d.Blocks))
+	}
+	if !d.Blocks[1].IsSpace {
+		t.Error("block 1: expected IsSpace=true")
+	}
+}
+
 func TestRenderColumns3Grid(t *testing.T) {
 	input := `block-beta
 columns 3

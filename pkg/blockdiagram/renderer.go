@@ -102,6 +102,15 @@ func renderRow(blocks []*Block, _ int, chars BoxChars, prefix string) []string {
 			botLine.WriteString("  ")
 		}
 
+		if b.IsSpace {
+			// Spacer block: render as empty space
+			totalW := w + 2 // account for the border characters we skip
+			topLine.WriteString(strings.Repeat(" ", totalW))
+			midLine.WriteString(strings.Repeat(" ", totalW))
+			botLine.WriteString(strings.Repeat(" ", totalW))
+			continue
+		}
+
 		topLine.WriteRune(chars.TopLeft)
 		topLine.WriteString(strings.Repeat(string(chars.Horizontal), w))
 		topLine.WriteRune(chars.TopRight)

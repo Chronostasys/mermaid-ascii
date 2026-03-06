@@ -623,8 +623,12 @@ func TestMermaidJSDocsExamples(t *testing.T) {
 		},
 
 		// === Block diagram examples from https://mermaid.js.org/syntax/block.html ===
-		// Note: our parser handles one block per line; multi-block-per-line and edge
-		// syntax from the docs are not yet supported.
+		{
+			name: "block/basic_columns",
+			input: `block-beta
+    columns 3
+    a b c d`,
+		},
 		{
 			name: "block/with_labels",
 			input: `block-beta
@@ -649,10 +653,21 @@ func TestMermaidJSDocsExamples(t *testing.T) {
 			name: "block/shapes",
 			input: `block-beta
     id1("Rounded")
-    id2("Stadium")
-    id3("Subroutine")
-    id4("Database")
-    id5("Circle")`,
+    id2(["Stadium"])
+    id3[["Subroutine"]]
+    id4[("Database")]
+    id5(("Circle"))`,
+		},
+		{
+			name: "block/with_edges",
+			input: `block-beta
+    A["Start"] --> B["Stop"]`,
+		},
+		{
+			name: "block/space_keyword",
+			input: `block-beta
+    columns 3
+    a space b`,
 		},
 
 		// === Sankey examples from https://mermaid.js.org/syntax/sankey.html ===
@@ -741,32 +756,91 @@ Done
     bottom_gateway:T -- B:junctionRight`,
 		},
 
-		// === ZenUML examples (adapted from https://mermaid.js.org/syntax/zenuml.html) ===
-		// Note: our parser supports Type.method() syntax, not the A->B: message arrow syntax.
+		// === ZenUML examples from https://mermaid.js.org/syntax/zenuml.html ===
 		{
-			name: "zenuml/sync_message",
+			name: "zenuml/basic",
+			input: `zenuml
+    Alice->John: Hello John, how are you?
+    John->Alice: Great!
+    Alice->John: See you later!`,
+		},
+		{
+			name: "zenuml/participants",
+			input: `zenuml
+    Bob
+    Alice
+    Alice->Bob: Hi Bob
+    Bob->Alice: Hi Alice`,
+		},
+		{
+			name: "zenuml/aliases",
+			input: `zenuml
+    A as Alice
+    J as John
+    A->J: Hello John, how are you?
+    J->A: Great!`,
+		},
+		{
+			name: "zenuml/annotators",
+			input: `zenuml
+    @Actor Alice
+    @Database Bob
+    Alice->Bob: Hi Bob
+    Bob->Alice: Hi Alice`,
+		},
+		{
+			name: "zenuml/loop",
+			input: `zenuml
+    Alice->John: Hello John, how are you?
+    while(true) {
+      John->Alice: Great!
+    }`,
+		},
+		{
+			name: "zenuml/alt_if_else",
+			input: `zenuml
+    Alice->Bob: Hello Bob, how are you?
+    if(is_sick) {
+      Bob->Alice: Not so good
+    } else {
+      Bob->Alice: Feeling fresh like a daisy
+    }`,
+		},
+		{
+			name: "zenuml/opt",
+			input: `zenuml
+    Alice->Bob: Hello Bob, how are you?
+    Bob->Alice: Not so good
+    opt {
+      Bob->Alice: Thanks for asking
+    }`,
+		},
+		{
+			name: "zenuml/par",
+			input: `zenuml
+    par {
+        Alice->Bob: Hello guys!
+        Alice->John: Hello guys!
+    }`,
+		},
+		{
+			name: "zenuml/try_catch",
+			input: `zenuml
+    try {
+      Consumer->API: Book something
+      API->BookingService: Start booking process
+    } catch {
+      API->Consumer: show failure
+    } finally {
+      API->BookingService: rollback status
+    }`,
+		},
+		{
+			name: "zenuml/dot_syntax",
 			input: `zenuml
 Client client
 Server server
 server.process(data)`,
-		},
-		{
-			name: "zenuml/async_block",
-			input: `zenuml
-Client client
-API api
-API.handleRequest() {
-    return ok
-}`,
-		},
-		{
-			name: "zenuml/nested_calls",
-			input: `zenuml
-Client client
-Server server
-Database db
-server.handleRequest(data)
-db.query(sql)`,
 		},
 	}
 
