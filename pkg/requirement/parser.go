@@ -4,31 +4,13 @@ package requirement
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
-	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
+	"github.com/pgavlin/mermaid-ascii/pkg/parser"
 )
 
 // RequirementDiagramKeyword is the Mermaid keyword that identifies a requirement diagram.
 const RequirementDiagramKeyword = "requirementDiagram"
-
-var (
-	// requirement name {
-	requirementStartRegex = regexp.MustCompile(`^\s*(requirement|functionalRequirement|interfaceRequirement|performanceRequirement|physicalRequirement|designConstraint)\s+(.+?)\s*\{\s*$`)
-
-	// element name {
-	elementStartRegex = regexp.MustCompile(`^\s*element\s+(.+?)\s*\{\s*$`)
-
-	// key: value inside a block
-	kvRegex = regexp.MustCompile(`^\s*(\w+)\s*:\s*(.+?)\s*$`)
-
-	// closing brace
-	closeBraceRegex = regexp.MustCompile(`^\s*\}\s*$`)
-
-	// name - relationship -> name2
-	relationshipRegex = regexp.MustCompile(`^\s*(.+?)\s+-\s+(traces|copies|derives|satisfies|verifies|refines|contains)\s+->\s+(.+?)\s*$`)
-)
 
 // Requirement represents a requirement node.
 type Requirement struct {
@@ -74,6 +56,25 @@ func IsRequirementDiagram(input string) bool {
 	return false
 }
 
+var requirementTypes = map[string]bool{
+	"requirement":             true,
+	"functionalRequirement":   true,
+	"interfaceRequirement":    true,
+	"performanceRequirement":  true,
+	"physicalRequirement":     true,
+	"designConstraint":        true,
+}
+
+var relationshipTypes = map[string]bool{
+	"traces":   true,
+	"copies":   true,
+	"derives":  true,
+	"satisfies": true,
+	"verifies": true,
+	"refines":  true,
+	"contains": true,
+}
+
 // Parse parses a requirement diagram.
 func Parse(input string) (*RequirementDiagram, error) {
 	input = strings.TrimSpace(input)
@@ -81,94 +82,216 @@ func Parse(input string) (*RequirementDiagram, error) {
 		return nil, fmt.Errorf("empty input")
 	}
 
-	rawLines := diagram.SplitLines(input)
-	lines := diagram.RemoveComments(rawLines)
-	if len(lines) == 0 {
-		return nil, fmt.Errorf("no content found")
-	}
+	s := parser.NewScanner(input)
+	s.SkipNewlines()
 
-	if !strings.HasPrefix(strings.TrimSpace(lines[0]), RequirementDiagramKeyword) {
+	tok := s.Peek()
+	if tok.Kind != parser.TokenIdent || tok.Text != RequirementDiagramKeyword {
 		return nil, fmt.Errorf("expected %q keyword", RequirementDiagramKeyword)
 	}
+	s.Next()
+	s.SkipNewlines()
 
 	d := &RequirementDiagram{}
 
-	i := 1
-	for i < len(lines) {
-		trimmed := strings.TrimSpace(lines[i])
-		if trimmed == "" {
-			i++
-			continue
+	for !s.AtEnd() {
+		s.SkipNewlines()
+		if s.AtEnd() {
+			break
 		}
 
-		// Requirement block
-		if m := requirementStartRegex.FindStringSubmatch(trimmed); m != nil {
-			req := &Requirement{Type: m[1], Name: strings.Trim(m[2], `"`)}
-			i++
-			for i < len(lines) {
-				inner := strings.TrimSpace(lines[i])
-				if closeBraceRegex.MatchString(inner) {
-					i++
-					break
-				}
-				if kv := kvRegex.FindStringSubmatch(inner); kv != nil {
-					switch kv[1] {
-					case "id":
-						req.ID = strings.Trim(kv[2], `"`)
-					case "text":
-						req.Text = strings.Trim(kv[2], `"`)
-					case "risk":
-						req.Risk = strings.Trim(kv[2], `"`)
-					case "verifymethod":
-						req.VerifyMethod = strings.Trim(kv[2], `"`)
-					}
-				}
-				i++
+		tok := s.Peek()
+
+		if tok.Kind == parser.TokenIdent {
+			// Requirement block: reqType name {
+			if requirementTypes[tok.Text] {
+				parseRequirement(s, d)
+				continue
 			}
-			d.Requirements = append(d.Requirements, req)
-			continue
-		}
 
-		// Element block
-		if m := elementStartRegex.FindStringSubmatch(trimmed); m != nil {
-			elem := &ReqElement{Name: strings.Trim(m[1], `"`)}
-			i++
-			for i < len(lines) {
-				inner := strings.TrimSpace(lines[i])
-				if closeBraceRegex.MatchString(inner) {
-					i++
-					break
-				}
-				if kv := kvRegex.FindStringSubmatch(inner); kv != nil {
-					switch kv[1] {
-					case "type":
-						elem.Type = strings.Trim(kv[2], `"`)
-					case "docref":
-						elem.DocRef = strings.Trim(kv[2], `"`)
-					case "docRef":
-						elem.DocRef = strings.Trim(kv[2], `"`)
-					}
-				}
-				i++
+			// Element block: element name {
+			if tok.Text == "element" {
+				parseElement(s, d)
+				continue
 			}
-			d.Elements = append(d.Elements, elem)
-			continue
 		}
 
-		// Relationship
-		if m := relationshipRegex.FindStringSubmatch(trimmed); m != nil {
-			rel := &ReqRelationship{
-				Source: strings.Trim(m[1], `"`),
-				Type:   m[2],
-				Target: strings.Trim(m[3], `"`),
+		// Try relationship: name - relType -> name2
+		// Names can be quoted strings or idents
+		if tok.Kind == parser.TokenIdent || tok.Kind == parser.TokenString {
+			if tryParseRelationship(s, d) {
+				continue
 			}
-			d.Relationships = append(d.Relationships, rel)
-			i++
-			continue
 		}
 
-		i++
+		parser.SkipToEndOfLine(s)
 	}
 
 	return d, nil
+}
+
+func parseRequirement(s *parser.Scanner, d *RequirementDiagram) {
+	reqType := s.Next().Text // consume requirement type keyword
+	s.SkipWhitespace()
+
+	name := collectName(s)
+	s.SkipWhitespace()
+
+	// Expect '{'
+	if s.Peek().Kind != parser.TokenLBrace {
+		parser.SkipToEndOfLine(s)
+		return
+	}
+	s.Next()
+	s.SkipNewlines()
+
+	req := &Requirement{Type: reqType, Name: name}
+
+	// Parse key: value pairs until '}'
+	for !s.AtEnd() {
+		tok := s.Peek()
+		if tok.Kind == parser.TokenRBrace {
+			s.Next()
+			break
+		}
+		if tok.Kind == parser.TokenIdent {
+			key := s.Next().Text
+			s.SkipWhitespace()
+			if s.Peek().Kind == parser.TokenColon {
+				s.Next() // consume ':'
+				s.SkipWhitespace()
+				value := strings.Trim(strings.TrimSpace(parser.ConsumeRestOfLine(s)), `"`)
+				switch key {
+				case "id":
+					req.ID = value
+				case "text":
+					req.Text = value
+				case "risk":
+					req.Risk = value
+				case "verifymethod":
+					req.VerifyMethod = value
+				}
+			} else {
+				parser.SkipToEndOfLine(s)
+			}
+		} else {
+			parser.SkipToEndOfLine(s)
+		}
+		s.SkipNewlines()
+	}
+
+	d.Requirements = append(d.Requirements, req)
+}
+
+func parseElement(s *parser.Scanner, d *RequirementDiagram) {
+	s.Next() // consume "element"
+	s.SkipWhitespace()
+
+	name := collectName(s)
+	s.SkipWhitespace()
+
+	// Expect '{'
+	if s.Peek().Kind != parser.TokenLBrace {
+		parser.SkipToEndOfLine(s)
+		return
+	}
+	s.Next()
+	s.SkipNewlines()
+
+	elem := &ReqElement{Name: name}
+
+	// Parse key: value pairs until '}'
+	for !s.AtEnd() {
+		tok := s.Peek()
+		if tok.Kind == parser.TokenRBrace {
+			s.Next()
+			break
+		}
+		if tok.Kind == parser.TokenIdent {
+			key := s.Next().Text
+			s.SkipWhitespace()
+			if s.Peek().Kind == parser.TokenColon {
+				s.Next() // consume ':'
+				s.SkipWhitespace()
+				value := strings.Trim(strings.TrimSpace(parser.ConsumeRestOfLine(s)), `"`)
+				switch key {
+				case "type":
+					elem.Type = value
+				case "docref", "docRef":
+					elem.DocRef = value
+				}
+			} else {
+				parser.SkipToEndOfLine(s)
+			}
+		} else {
+			parser.SkipToEndOfLine(s)
+		}
+		s.SkipNewlines()
+	}
+
+	d.Elements = append(d.Elements, elem)
+}
+
+// tryParseRelationship attempts: name - relType -> name2
+func tryParseRelationship(s *parser.Scanner, d *RequirementDiagram) bool {
+	saved := s.Save()
+
+	// Source name (possibly quoted)
+	source := collectName(s)
+	if source == "" {
+		s.Restore(saved)
+		return false
+	}
+	s.SkipWhitespace()
+
+	// Expect "-"
+	if s.Peek().Kind != parser.TokenOperator || s.Peek().Text != "-" {
+		s.Restore(saved)
+		return false
+	}
+	s.Next()
+	s.SkipWhitespace()
+
+	// Expect relationship type
+	relTok := s.Peek()
+	if relTok.Kind != parser.TokenIdent || !relationshipTypes[relTok.Text] {
+		s.Restore(saved)
+		return false
+	}
+	relType := s.Next().Text
+	s.SkipWhitespace()
+
+	// Expect "->"
+	if s.Peek().Kind != parser.TokenOperator || s.Peek().Text != "->" {
+		s.Restore(saved)
+		return false
+	}
+	s.Next()
+	s.SkipWhitespace()
+
+	// Target name
+	target := collectName(s)
+	if target == "" {
+		s.Restore(saved)
+		return false
+	}
+
+	d.Relationships = append(d.Relationships, &ReqRelationship{
+		Source: source,
+		Type:   relType,
+		Target: target,
+	})
+	return true
+}
+
+// collectName collects a name which may be a quoted string or an identifier.
+func collectName(s *parser.Scanner) string {
+	tok := s.Peek()
+	if tok.Kind == parser.TokenString {
+		return s.Next().Text
+	}
+	if tok.Kind == parser.TokenIdent {
+		return s.Next().Text
+	}
+	return ""
 }
