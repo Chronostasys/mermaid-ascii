@@ -1,7 +1,5 @@
 // Package zenuml implements parsing and rendering of ZenUML sequence diagrams
 // in Mermaid syntax.
-// Package zenuml implements parsing and rendering of ZenUML sequence diagrams
-// in Mermaid syntax.
 package zenuml
 
 import (
@@ -12,7 +10,6 @@ import (
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
-// ZenUMLKeyword is the Mermaid keyword that identifies a ZenUML diagram.
 // ZenUMLKeyword is the Mermaid keyword that identifies a ZenUML diagram.
 const ZenUMLKeyword = "zenuml"
 

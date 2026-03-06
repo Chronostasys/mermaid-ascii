@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// removeComments removes Mermaid comment lines from input.
+// RemoveComments removes Mermaid comment lines from input.
 // This function is shared between graph and sequence diagram parsers.
 // It handles both full-line comments (%% at start) and inline comments (%% after content).
 func RemoveComments(lines []string) []string {

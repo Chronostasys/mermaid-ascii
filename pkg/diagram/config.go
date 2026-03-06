@@ -189,6 +189,7 @@ type ConfigError struct {
 	Message string
 }
 
+// Error returns a human-readable description of the configuration error.
 func (e *ConfigError) Error() string {
 	return fmt.Sprintf("invalid config: %s = %v (%s)", e.Field, e.Value, e.Message)
 }
