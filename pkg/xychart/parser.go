@@ -14,11 +14,13 @@ import (
 const XYChartKeyword = "xychart-beta"
 
 var (
-	titleRegex = regexp.MustCompile(`^\s*title\s+"([^"]+)"$`)
-	xAxisRegex = regexp.MustCompile(`^\s*x-axis\s+"([^"]+)"\s+\[(.+)\]$`)
-	yAxisRegex = regexp.MustCompile(`^\s*y-axis\s+"([^"]+)"(?:\s+(\d+)\s*-->\s*(\d+))?$`)
-	barRegex   = regexp.MustCompile(`^\s*bar\s+\[(.+)\]$`)
-	lineRegex  = regexp.MustCompile(`^\s*line\s+\[(.+)\]$`)
+	titleRegex          = regexp.MustCompile(`^\s*title\s+"([^"]+)"$`)
+	xAxisLabelRegex     = regexp.MustCompile(`^\s*x-axis\s+"([^"]+)"\s+\[(.+)\]$`)
+	xAxisNoLabelRegex   = regexp.MustCompile(`^\s*x-axis\s+\[(.+)\]$`)
+	yAxisLabelRegex     = regexp.MustCompile(`^\s*y-axis\s+"([^"]+)"(?:\s+(\d+(?:\.\d+)?)\s*-->\s*(\d+(?:\.\d+)?))?$`)
+	yAxisNoLabelRegex   = regexp.MustCompile(`^\s*y-axis\s+(\d+(?:\.\d+)?)\s*-->\s*(\d+(?:\.\d+)?)$`)
+	barRegex            = regexp.MustCompile(`^\s*bar\s+\[(.+)\]$`)
+	lineRegex           = regexp.MustCompile(`^\s*line\s+\[(.+)\]$`)
 )
 
 // XYChart represents a parsed XY chart with optional bar and line data series.
@@ -81,13 +83,18 @@ func Parse(input string) (*XYChart, error) {
 			continue
 		}
 
-		if match := xAxisRegex.FindStringSubmatch(trimmed); match != nil {
+		if match := xAxisLabelRegex.FindStringSubmatch(trimmed); match != nil {
 			chart.XLabel = match[1]
 			chart.XValues = parseStringList(match[2])
 			continue
 		}
 
-		if match := yAxisRegex.FindStringSubmatch(trimmed); match != nil {
+		if match := xAxisNoLabelRegex.FindStringSubmatch(trimmed); match != nil {
+			chart.XValues = parseStringList(match[1])
+			continue
+		}
+
+		if match := yAxisLabelRegex.FindStringSubmatch(trimmed); match != nil {
 			chart.YLabel = match[1]
 			if match[2] != "" {
 				chart.YMin, _ = strconv.ParseFloat(match[2], 64)
@@ -95,6 +102,12 @@ func Parse(input string) (*XYChart, error) {
 			if match[3] != "" {
 				chart.YMax, _ = strconv.ParseFloat(match[3], 64)
 			}
+			continue
+		}
+
+		if match := yAxisNoLabelRegex.FindStringSubmatch(trimmed); match != nil {
+			chart.YMin, _ = strconv.ParseFloat(match[1], 64)
+			chart.YMax, _ = strconv.ParseFloat(match[2], 64)
 			continue
 		}
 

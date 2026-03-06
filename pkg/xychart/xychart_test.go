@@ -368,6 +368,70 @@ func TestRenderASCIIBarChart(t *testing.T) {
 	}
 }
 
+func TestParseXAxisNoLabel(t *testing.T) {
+	input := `xychart-beta
+    x-axis ["Mar 25", "Apr 25", "May 25"]
+    y-axis "Runs" 0 --> 6500
+    bar [2052, 2488, 3415]`
+
+	chart, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if len(chart.XValues) != 3 {
+		t.Errorf("XValues count = %d, want 3", len(chart.XValues))
+	}
+	if chart.XValues[0] != "Mar 25" {
+		t.Errorf("XValues[0] = %q, want %q", chart.XValues[0], "Mar 25")
+	}
+	if chart.XLabel != "" {
+		t.Errorf("XLabel = %q, want empty", chart.XLabel)
+	}
+}
+
+func TestParseYAxisNoLabel(t *testing.T) {
+	input := `xychart-beta
+    y-axis 0 --> 100
+    bar [30, 60, 90]`
+
+	chart, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if chart.YMin != 0 {
+		t.Errorf("YMin = %f, want 0", chart.YMin)
+	}
+	if chart.YMax != 100 {
+		t.Errorf("YMax = %f, want 100", chart.YMax)
+	}
+	if chart.YLabel != "" {
+		t.Errorf("YLabel = %q, want empty", chart.YLabel)
+	}
+}
+
+func TestRenderXAxisNoLabel(t *testing.T) {
+	input := `xychart-beta
+    title "Drift Detection Runs per Month"
+    x-axis ["Mar 25", "Apr 25", "May 25"]
+    y-axis "Runs" 0 --> 6500
+    bar [2052, 2488, 3415]`
+
+	chart, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	output, err := Render(chart, diagram.DefaultConfig())
+	if err != nil {
+		t.Fatalf("Render failed: %v", err)
+	}
+	if !strings.Contains(output, "Mar 25") {
+		t.Errorf("expected x-axis label 'Mar 25' in output:\n%s", output)
+	}
+	if !strings.Contains(output, "May 25") {
+		t.Errorf("expected x-axis label 'May 25' in output:\n%s", output)
+	}
+}
+
 func TestRenderNoTitle(t *testing.T) {
 	input := `xychart-beta
     bar [10, 20]`
