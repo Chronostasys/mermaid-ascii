@@ -472,7 +472,7 @@ func renderGroupHeaders(sd *SequenceDiagram, layout *diagramLayout, chars BoxCha
 			for _, r := range s.label {
 				if col < len(labelLine) {
 					labelLine[col] = r
-					col++
+					col += runewidth.RuneWidth(r)
 				}
 			}
 		}
@@ -622,9 +622,9 @@ func renderInlineParticipant(p *Participant, layout *diagramLayout, chars BoxCha
 	for _, r := range p.Label {
 		if col < len(labelLine) {
 			labelLine[col] = r
-			col++
-		}
-	}
+						col += runewidth.RuneWidth(r)
+				}
+			}
 	lines = append(lines, strings.TrimRight(string(labelLine), " "))
 
 	// Bottom border with lifeline tee
@@ -804,7 +804,7 @@ func renderMessage(msg *Message, layout *diagramLayout, chars BoxChars, actState
 		for _, r := range label {
 			if col < len(line) {
 				line[col] = r
-				col++
+				col += runewidth.RuneWidth(r)
 			}
 		}
 		lines = append(lines, strings.TrimRight(string(line), " "))
@@ -873,12 +873,12 @@ func renderSelfMessage(msg *Message, layout *diagramLayout, chars BoxChars, actS
 			line = append(line, pad...)
 		}
 		col := start
-		for _, c := range label {
-			if col < len(line) {
-				line[col] = c
-				col++
+			for _, c := range label {
+				if col < len(line) {
+					line[col] = c
+					col += runewidth.RuneWidth(c)
+				}
 			}
-		}
 		lines = append(lines, strings.TrimRight(string(line), " "))
 	}
 
@@ -981,11 +981,11 @@ func renderNote(note *Note, layout *diagramLayout, chars BoxChars, actState *act
 		col++
 	}
 	for _, r := range note.Text {
-		if col < len(textLine) {
-			textLine[col] = r
-			col++
+			if col < len(textLine) {
+				textLine[col] = r
+				col += runewidth.RuneWidth(r)
+			}
 		}
-	}
 	if col < len(textLine) {
 		textLine[col] = ' '
 		col++
@@ -1046,11 +1046,11 @@ func renderBlock(block *Block, layout *diagramLayout, chars BoxChars, actState *
 	}
 	col := leftX + 2
 	for _, r := range blockLabel {
-		if col < len(labelLine) {
-			labelLine[col] = r
-			col++
+			if col < len(labelLine) {
+				labelLine[col] = r
+				col += runewidth.RuneWidth(r)
+			}
 		}
-	}
 	lines = append(lines, strings.TrimRight(string(labelLine), " "))
 
 	// Separator after label
@@ -1123,9 +1123,9 @@ func renderBlock(block *Block, layout *diagramLayout, chars BoxChars, actState *
 			col := leftX + 2
 			for _, r := range section.Label {
 				if col < len(sLabelLine) {
-					sLabelLine[col] = r
-					col++
-				}
+						sLabelLine[col] = r
+						col += runewidth.RuneWidth(r)
+					}
 			}
 			lines = append(lines, strings.TrimRight(string(sLabelLine), " "))
 		}
