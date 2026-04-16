@@ -1,6 +1,10 @@
 package canvas
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/mattn/go-runewidth"
+)
 
 // BoxChars holds characters for drawing boxes.
 type BoxChars struct {
@@ -37,7 +41,7 @@ func (b BoxChars) BottomBorder(width int) string {
 
 // CenterText returns a line with centered text between vertical borders: │ text │
 func (b BoxChars) CenterText(text string, width int) string {
-	pad := width - len(text)
+	pad := width - runewidth.StringWidth(text)
 	left := pad / 2
 	right := pad - left
 	return string(b.Vertical) + strings.Repeat(" ", left) + text + strings.Repeat(" ", right) + string(b.Vertical)

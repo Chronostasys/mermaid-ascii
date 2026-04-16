@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/mattn/go-runewidth"
 	"github.com/pgavlin/mermaid-ascii/pkg/canvas"
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
@@ -58,11 +59,11 @@ func Render(sd *StateDiagram, config *diagram.Config) (string, error) {
 		noteMap[n.State.ID] = n
 	}
 
-	// Calculate the max width needed for state boxes
+	// Calculate the max width needed for state boxes (display width, not byte length)
 	maxWidth := 0
 	for _, s := range ordered {
 		label := stateLabel(s)
-		w := len(label) + stateBoxPadding // 2 padding + 2 border
+		w := runewidth.StringWidth(label) + stateBoxPadding // 2 padding + 2 border
 		if w > maxWidth {
 			maxWidth = w
 		}
@@ -135,8 +136,8 @@ func stateLabel(s *State) string {
 }
 
 func renderStateBox(label string, innerWidth int, chars stateChars) []string {
-	if len(label) > innerWidth {
-		innerWidth = len(label) + 2
+	if runewidth.StringWidth(label) > innerWidth {
+		innerWidth = runewidth.StringWidth(label) + 2
 	}
 
 	return []string{

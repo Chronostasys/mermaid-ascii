@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mattn/go-runewidth"
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 )
 
@@ -52,18 +53,18 @@ func Render(gd *GanttDiagram, config *diagram.Config) (string, error) {
 		totalDuration = 24 * time.Hour
 	}
 
-	// Calculate label width from longest task/section name
+	// Calculate label width from longest task/section name (display width, not byte length)
 	labelWidth := minLabelWidth
 	for _, task := range gd.Tasks {
-		if len(task.Name) > labelWidth {
-			labelWidth = len(task.Name)
+		if w := runewidth.StringWidth(task.Name); w > labelWidth {
+			labelWidth = w
 		}
 	}
 	for _, section := range gd.Sections {
-		if len(section.Name) > labelWidth {
-			labelWidth = len(section.Name)
+			if w := runewidth.StringWidth(section.Name); w > labelWidth {
+				labelWidth = w
+			}
 		}
-	}
 	labelWidth += labelPadding
 	if labelWidth > defaultLabelWidth {
 		labelWidth = defaultLabelWidth + labelPadding
@@ -197,17 +198,33 @@ func renderTaskLine(task *Task, minTime time.Time, totalDuration time.Duration, 
 }
 
 func truncateOrPad(s string, width int) string {
-	if len(s) > width {
-		return s[:width-1] + "…"
+	w := runewidth.StringWidth(s)
+	if w > width {
+		// Truncate by display width, not byte length
+		var runes []rune
+		remaining := width - 1 // leave room for …
+		for _, r := range s {
+			rw := runewidth.RuneWidth(r)
+			if remaining <= 0 {
+				break
+			}
+			if rw > remaining {
+				break
+			}
+			runes = append(runes, r)
+			remaining -= rw
+		}
+		return string(runes) + "…"
 	}
-	return s + strings.Repeat(" ", width-len(s))
+	return s + strings.Repeat(" ", width-w)
 }
 
 func centerText(s string, width int) string {
-	if len(s) >= width {
+	w := runewidth.StringWidth(s)
+	if w >= width {
 		return s
 	}
-	pad := (width - len(s)) / 2
+	pad := (width - w) / 2
 	return strings.Repeat(" ", pad) + s
 }
 

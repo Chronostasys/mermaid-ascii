@@ -55,17 +55,16 @@ func (a *activationState) isActive(pIdx int) bool {
 	return a.stacks[pIdx] > 0
 }
 
-// writeRunes writes runes into a rune slice at the given column position,
-// advancing col by each rune's display width and clearing trailing cells
-// for wide (CJK) characters to prevent spurious characters from showing.
+// writeRunes writes runes into a rune slice at the given column position.
+// Each rune advances col by 1 (not by display width), because the rune slice
+// is indexed by rune position, not display column. CJK characters naturally
+// occupy 2 terminal columns when printed, so packing them tightly produces
+// correct output: 提交用户名密码 (not 提 交 用 户 名 密 码).
 func writeRunes(line []rune, col int, text string) int {
 	for _, r := range text {
 		if col < len(line) {
 			line[col] = r
-			if w := runewidth.RuneWidth(r); w > 1 && col+1 < len(line) {
-				line[col+1] = ' '
-			}
-			col += runewidth.RuneWidth(r)
+			col++
 		}
 	}
 	return col
