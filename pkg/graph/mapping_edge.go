@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"github.com/mattn/go-runewidth"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -69,7 +70,7 @@ func (g *graph) determinePath(e *edge) {
 
 func (g *graph) determineLabelLine(e *edge) {
 	// What line on the path should the label be placed?
-	lenLabel := len(e.text)
+	lenLabel := runewidth.StringWidth(e.text)
 	if lenLabel == 0 {
 		return
 	}

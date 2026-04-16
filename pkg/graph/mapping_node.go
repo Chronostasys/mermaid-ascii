@@ -3,6 +3,7 @@ package graph
 import (
 	"strings"
 
+	"github.com/mattn/go-runewidth"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -15,8 +16,9 @@ func (n *node) nameLines() []string {
 func (n *node) nameWidth() int {
 	w := 0
 	for _, line := range n.nameLines() {
-		if len(line) > w {
-			w = len(line)
+		sw := runewidth.StringWidth(line)
+		if sw > w {
+			w = sw
 		}
 	}
 	return w
@@ -54,9 +56,10 @@ func (n *node) setDrawing(g graph) *drawing {
 	return d
 }
 
-// wordWrap wraps text to fit within maxWidth characters.
+// wordWrap wraps text to fit within maxWidth display columns.
 // It preserves existing newlines, wraps at word boundaries when possible,
 // and falls back to character-level breaks for words longer than maxWidth.
+// All width calculations use runewidth for correct CJK handling.
 func wordWrap(text string, maxWidth int) string {
 	if maxWidth <= 0 {
 		maxWidth = 1
@@ -64,31 +67,52 @@ func wordWrap(text string, maxWidth int) string {
 	lines := strings.Split(text, "\n")
 	var result []string
 	for _, line := range lines {
-		if len(line) <= maxWidth {
+		if runewidth.StringWidth(line) <= maxWidth {
 			result = append(result, line)
 			continue
 		}
 		// Wrap this line
-		for len(line) > maxWidth {
-			// Find last space within maxWidth
-			breakAt := -1
-			for i := maxWidth; i >= 0; i-- {
-				if i < len(line) && line[i] == ' ' {
-					breakAt = i
+		for runewidth.StringWidth(line) > maxWidth {
+			// Find last space within maxWidth display columns
+			breakAt := -1 // byte index of the space character
+			widthSoFar := 0
+			runes := []rune(line)
+			for i, r := range runes {
+				if widthSoFar > maxWidth {
 					break
 				}
+				if r == ' ' {
+					breakAt = i
+					
+				}
+				widthSoFar += runewidth.RuneWidth(r)
 			}
 			if breakAt <= 0 {
-				// No space found, break at maxWidth
-				breakAt = maxWidth
-				result = append(result, line[:breakAt])
-				line = line[breakAt:]
+				// No space found, break at maxWidth display columns
+				widthSoFar = 0
+				breakRuneIdx := len(runes)
+				for i, r := range runes {
+					w := runewidth.RuneWidth(r)
+					if widthSoFar+w > maxWidth {
+						breakRuneIdx = i
+						break
+					}
+					widthSoFar += w
+				}
+				if breakRuneIdx <= 0 {
+					breakRuneIdx = 1
+				}
+				result = append(result, string(runes[:breakRuneIdx]))
+				runes = runes[breakRuneIdx:]
+				line = string(runes)
 			} else {
-				result = append(result, line[:breakAt])
-				line = line[breakAt+1:] // skip the space
+				result = append(result, string(runes[:breakAt]))
+				// skip the space
+				runes = runes[breakAt+1:]
+				line = string(runes)
 			}
 		}
-		if len(line) > 0 {
+		if runewidth.StringWidth(line) > 0 {
 			result = append(result, line)
 		}
 	}
@@ -116,8 +140,9 @@ func longestWord(text string) int {
 	max := 0
 	for _, line := range strings.Split(text, "\n") {
 		for _, word := range strings.Fields(line) {
-			if len(word) > max {
-				max = len(word)
+			sw := runewidth.StringWidth(word)
+			if sw > max {
+				max = sw
 			}
 		}
 	}
@@ -180,7 +205,7 @@ func (g *graph) constrainToTargetWidth() {
 			minX, maxX = maxX, minX
 		}
 		middleX := minX + (maxX-minX)/2
-		labelMin := len(e.text) + 2
+		labelMin := runewidth.StringWidth(e.text) + 2
 		if labelMin > edgeLabelMins[middleX] {
 			edgeLabelMins[middleX] = labelMin
 		}
@@ -209,7 +234,7 @@ func (g *graph) constrainToTargetWidth() {
 
 	// Phase 2: Wrap node text in content columns
 	// Compute minimum text width per content column (longest word across all nodes)
-	const minTextChars = 5 // absolute minimum readable width
+	const minTextWidth = 5 // absolute minimum readable width
 	excess := sumWidth() - g.targetWidth
 
 	// Compute total shrinkable width from content columns
@@ -224,7 +249,7 @@ func (g *graph) constrainToTargetWidth() {
 	for col, nodes := range contentColNodes {
 		currentW := g.columnWidth[col]
 		// Find the minimum text width (longest word across nodes in this column)
-		maxLongestWord := minTextChars
+		maxLongestWord := minTextWidth
 		maxShapeExtra := 0
 		for _, n := range nodes {
 			lw := longestWord(n.name)
@@ -310,6 +335,22 @@ func (g *graph) constrainToTargetWidth() {
 		yCoord := n.gridCoord.y + 1
 		g.rowHeight[yCoord] = Max(g.rowHeight[yCoord], rowHeight)
 	}
+
+	// For diamond nodes, enforce symmetry: getNodeDimensions sums 2 columns
+	// and 2 rows, and drawDiamondBox needs w == h for proper 45° diagonals.
+	for _, n := range g.nodes {
+		if n.shape == shapeDiamond && n.gridCoord != nil {
+			x := n.gridCoord.x
+			y := n.gridCoord.y
+			w := g.columnWidth[x] + g.columnWidth[x+1]
+			h := g.rowHeight[y] + g.rowHeight[y+1]
+			if w > h {
+				g.rowHeight[y+1] += w - h
+			} else if h > w {
+				g.columnWidth[x+1] += h - w
+			}
+		}
+	}
 }
 
 func (g *graph) setColumnWidth(n *node) {
@@ -355,6 +396,18 @@ func (g *graph) setColumnWidth(n *node) {
 		rowHeight += 2 // extra rows for top and bottom points
 	}
 	rowsToBePlaced := []int{1, rowHeight, 1} // Border, padding + line, border
+
+	// For diamond shapes, enforce total width == total height so that
+	// drawDiamondBox renders proper 45° diagonal angles.
+	if n.shape == shapeDiamond {
+		totalW := colsToBePlaced[0] + colsToBePlaced[1] + colsToBePlaced[2]
+		totalH := rowsToBePlaced[0] + rowsToBePlaced[1] + rowsToBePlaced[2]
+		if totalW > totalH {
+			rowsToBePlaced[1] += totalW - totalH
+		} else if totalH > totalW {
+			colsToBePlaced[1] += totalH - totalW
+		}
+	}
 
 	for idx, col := range colsToBePlaced {
 		// Set new width for column if the size increased

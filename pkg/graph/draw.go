@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gookit/color"
+	"github.com/mattn/go-runewidth"
 	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
 	log "github.com/sirupsen/logrus"
 )
@@ -48,11 +49,14 @@ func (g *graph) drawEdge(e *edge) (*drawing, *drawing, *drawing, *drawing, *draw
 }
 
 func (d *drawing) drawText(start drawingCoord, text string) {
+	textWidth := runewidth.StringWidth(text)
 	// Increase dimensions if necessary.
-	d.increaseSize(start.x+len(text), start.y)
-	log.Debug("Drawing '", text, "' from ", start, " to ", drawingCoord{x: start.x + len(text), y: start.y})
-	for x := 0; x < len(text); x++ {
-		(*d)[x+start.x][start.y] = string(text[x])
+	d.increaseSize(start.x+textWidth, start.y)
+	log.Debug("Drawing '", text, "' from ", start, " to ", drawingCoord{x: start.x + textWidth, y: start.y})
+	x := 0
+	for _, ch := range text {
+		(*d)[x+start.x][start.y] = string(ch)
+		x += runewidth.RuneWidth(ch)
 	}
 }
 
@@ -206,9 +210,11 @@ func drawNodeText(d *drawing, n *node, g graph, w, h int) {
 	startY := h/2 - (numLines-1)/2
 	for i, line := range lines {
 		textY := startY + i
-		textX := w/2 - CeilDiv(len(line), 2) + 1
-		for x := 0; x < len(line); x++ {
-			(*d)[textX+x][textY] = wrapTextInColor(string(line[x]), n.styleClass.styles["color"], g.styleType)
+		textX := w/2 - CeilDiv(runewidth.StringWidth(line), 2) + 1
+		x := 0
+		for _, ch := range line {
+			(*d)[textX+x][textY] = wrapTextInColor(string(ch), n.styleClass.styles["color"], g.styleType)
+			x += runewidth.RuneWidth(ch)
 		}
 	}
 }

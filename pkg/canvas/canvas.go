@@ -1,6 +1,10 @@
 package canvas
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/mattn/go-runewidth"
+)
 
 // Canvas is a 2D grid of characters for rendering diagrams.
 // Internally it is stored as [x][y] (column-major), matching the
@@ -66,8 +70,9 @@ func (c *Canvas) Get(x, y int) string {
 // DrawText writes text horizontally starting at position (x, y).
 // Characters that fall outside the canvas bounds are silently skipped.
 func (c *Canvas) DrawText(x, y int, text string) {
-	for i, ch := range text {
-		c.Set(x+i, y, string(ch))
+	for _, ch := range text {
+		c.Set(x, y, string(ch))
+		x += runewidth.RuneWidth(ch)
 	}
 }
 
