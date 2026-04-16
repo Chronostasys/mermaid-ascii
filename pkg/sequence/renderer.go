@@ -55,6 +55,22 @@ func (a *activationState) isActive(pIdx int) bool {
 	return a.stacks[pIdx] > 0
 }
 
+// writeRunes writes runes into a rune slice at the given column position,
+// advancing col by each rune's display width and clearing trailing cells
+// for wide (CJK) characters to prevent spurious characters from showing.
+func writeRunes(line []rune, col int, text string) int {
+	for _, r := range text {
+		if col < len(line) {
+			line[col] = r
+			if w := runewidth.RuneWidth(r); w > 1 && col+1 < len(line) {
+				line[col+1] = ' '
+			}
+			col += runewidth.RuneWidth(r)
+		}
+	}
+	return col
+}
+
 func (a *activationState) depth(pIdx int) int {
 	return a.stacks[pIdx]
 }
@@ -467,14 +483,9 @@ func renderGroupHeaders(sd *SequenceDiagram, layout *diagramLayout, chars BoxCha
 			pad := (spanWidth - labelWidth) / 2
 			col := s.leftX + pad
 			if col < 0 {
-				col = 0
-			}
-			for _, r := range s.label {
-				if col < len(labelLine) {
-					labelLine[col] = r
-					col += runewidth.RuneWidth(r)
+					col = 0
 				}
-			}
+				writeRunes(labelLine, col, s.label)
 		}
 	}
 	lines = append(lines, strings.TrimRight(string(labelLine), " "))
@@ -619,12 +630,7 @@ func renderInlineParticipant(p *Participant, layout *diagramLayout, chars BoxCha
 	labelLen := runewidth.StringWidth(p.Label)
 	pad := (boxWidth - labelLen) / 2
 	col := leftX + 1 + pad
-	for _, r := range p.Label {
-		if col < len(labelLine) {
-			labelLine[col] = r
-						col += runewidth.RuneWidth(r)
-				}
-			}
+		writeRunes(labelLine, col, p.Label)
 	lines = append(lines, strings.TrimRight(string(labelLine), " "))
 
 	// Bottom border with lifeline tee
@@ -801,12 +807,7 @@ func renderMessage(msg *Message, layout *diagramLayout, chars BoxChars, actState
 		}
 
 		col := start
-		for _, r := range label {
-			if col < len(line) {
-				line[col] = r
-				col += runewidth.RuneWidth(r)
-			}
-		}
+			writeRunes(line, col, label)
 		lines = append(lines, strings.TrimRight(string(line), " "))
 	}
 
@@ -873,12 +874,7 @@ func renderSelfMessage(msg *Message, layout *diagramLayout, chars BoxChars, actS
 			line = append(line, pad...)
 		}
 		col := start
-			for _, c := range label {
-				if col < len(line) {
-					line[col] = c
-					col += runewidth.RuneWidth(c)
-				}
-			}
+			writeRunes(line, col, label)
 		lines = append(lines, strings.TrimRight(string(line), " "))
 	}
 
@@ -980,12 +976,7 @@ func renderNote(note *Note, layout *diagramLayout, chars BoxChars, actState *act
 		textLine[col] = ' '
 		col++
 	}
-	for _, r := range note.Text {
-			if col < len(textLine) {
-				textLine[col] = r
-				col += runewidth.RuneWidth(r)
-			}
-		}
+	col = writeRunes(textLine, col, note.Text)
 	if col < len(textLine) {
 		textLine[col] = ' '
 		col++
@@ -1045,12 +1036,7 @@ func renderBlock(block *Block, layout *diagramLayout, chars BoxChars, actState *
 		labelLine[rightX] = chars.Vertical
 	}
 	col := leftX + 2
-	for _, r := range blockLabel {
-			if col < len(labelLine) {
-				labelLine[col] = r
-				col += runewidth.RuneWidth(r)
-			}
-		}
+		writeRunes(labelLine, col, blockLabel)
 	lines = append(lines, strings.TrimRight(string(labelLine), " "))
 
 	// Separator after label
@@ -1121,12 +1107,7 @@ func renderBlock(block *Block, layout *diagramLayout, chars BoxChars, actState *
 				sLabelLine[rightX] = chars.Vertical
 			}
 			col := leftX + 2
-			for _, r := range section.Label {
-				if col < len(sLabelLine) {
-						sLabelLine[col] = r
-						col += runewidth.RuneWidth(r)
-					}
-			}
+				writeRunes(sLabelLine, col, section.Label)
 			lines = append(lines, strings.TrimRight(string(sLabelLine), " "))
 		}
 
