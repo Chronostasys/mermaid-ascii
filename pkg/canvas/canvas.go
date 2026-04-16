@@ -69,10 +69,16 @@ func (c *Canvas) Get(x, y int) string {
 
 // DrawText writes text horizontally starting at position (x, y).
 // Characters that fall outside the canvas bounds are silently skipped.
+// Wide characters (CJK, etc.) occupy multiple columns; trailing cells are
+// cleared to empty string so ToString doesn't inject spurious spaces.
 func (c *Canvas) DrawText(x, y int, text string) {
 	for _, ch := range text {
+		w := runewidth.RuneWidth(ch)
 		c.Set(x, y, string(ch))
-		x += runewidth.RuneWidth(ch)
+		if w > 1 {
+			c.Set(x+1, y, "") // clear trailing cell(s)
+		}
+		x += w
 	}
 }
 

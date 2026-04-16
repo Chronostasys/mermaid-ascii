@@ -56,6 +56,11 @@ func (d *drawing) drawText(start drawingCoord, text string) {
 	x := 0
 	for _, ch := range text {
 		(*d)[x+start.x][start.y] = string(ch)
+		if w := runewidth.RuneWidth(ch); w > 1 {
+			if x+start.x+1 < len(*d) {
+				(*d)[x+start.x+1][start.y] = ""
+			}
+		}
 		x += runewidth.RuneWidth(ch)
 	}
 }
@@ -212,10 +217,15 @@ func drawNodeText(d *drawing, n *node, g graph, w, h int) {
 		textY := startY + i
 		textX := w/2 - CeilDiv(runewidth.StringWidth(line), 2) + 1
 		x := 0
-		for _, ch := range line {
-			(*d)[textX+x][textY] = wrapTextInColor(string(ch), n.styleClass.styles["color"], g.styleType)
-			x += runewidth.RuneWidth(ch)
-		}
+			for _, ch := range line {
+				(*d)[textX+x][textY] = wrapTextInColor(string(ch), n.styleClass.styles["color"], g.styleType)
+				if w := runewidth.RuneWidth(ch); w > 1 {
+					if textX+x+1 < len(*d) {
+						(*d)[textX+x+1][textY] = ""
+					}
+				}
+				x += runewidth.RuneWidth(ch)
+			}
 	}
 }
 
