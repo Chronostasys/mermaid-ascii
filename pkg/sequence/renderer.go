@@ -55,19 +55,65 @@ func (a *activationState) isActive(pIdx int) bool {
 	return a.stacks[pIdx] > 0
 }
 
-// writeRunes writes runes into a rune slice at the given column position.
-// Each rune advances col by 1 (not by display width), because the rune slice
-// is indexed by rune position, not display column. CJK characters naturally
-// occupy 2 terminal columns when printed, so packing them tightly produces
-// correct output: 提交用户名密码 (not 提 交 用 户 名 密 码).
-func writeRunes(line []rune, col int, text string) int {
+// writeRunes writes runes into a display-column-based string slice at the given column position.
+// Each rune advances col by its display width (CJK = 2, ASCII = 1).
+// Wide characters clear trailing cells with empty string "".
+func writeRunes(line []string, col int, text string) int {
 	for _, r := range text {
 		if col < len(line) {
-			line[col] = r
-			col++
+			w := runewidth.RuneWidth(r)
+			line[col] = string(r)
+			for i := 1; i < w; i++ {
+				if col+i < len(line) {
+					line[col+i] = ""
+				}
+			}
+			col += w
 		}
 	}
 	return col
+}
+
+// runeLineToString converts a display-column-based string slice to output string.
+// Empty strings (cells consumed by wide chars) are included but contribute nothing.
+// Trailing spaces are trimmed.
+func runeLineToString(line []string) string {
+	last := len(line) - 1
+	for last >= 0 && line[last] == " " {
+		last--
+	}
+	if last < 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i := 0; i <= last; i++ {
+		b.WriteString(line[i])
+	}
+	return b.String()
+}
+
+// stringToLine converts a string to a display-column-based string slice.
+// Handles CJK characters properly by advancing by display width.
+func stringToLine(s string, width int) []string {
+	line := make([]string, width)
+	for i := range line {
+		line[i] = " "
+	}
+	col := 0
+	for _, r := range s {
+		if col >= width {
+			break
+		}
+		w := runewidth.RuneWidth(r)
+		line[col] = string(r)
+		for i := 1; i < w; i++ {
+			if col+i < width {
+				line[col+i] = ""
+			}
+		}
+		col += w
+	}
+	return line
 }
 
 func (a *activationState) depth(pIdx int) int {
@@ -487,48 +533,48 @@ func renderGroupHeaders(sd *SequenceDiagram, layout *diagramLayout, chars BoxCha
 				writeRunes(labelLine, col, s.label)
 		}
 	}
-	lines = append(lines, strings.TrimRight(string(labelLine), " "))
+	lines = append(lines, runeLineToString(labelLine))
 
 	// Render top border line with [ and ]
 	borderLine := makeEmptyLine(totalWidth)
 	for _, s := range spans {
 		if s.leftX < len(borderLine) {
-			borderLine[s.leftX] = '['
+			borderLine[s.leftX] = "["
 		}
 		for j := s.leftX + 1; j < s.rightX && j < len(borderLine); j++ {
-			borderLine[j] = chars.Horizontal
+			borderLine[j] = string(chars.Horizontal)
 		}
 		if s.rightX < len(borderLine) {
-			borderLine[s.rightX] = ']'
+			borderLine[s.rightX] = "]"
 		}
 	}
-	lines = append(lines, strings.TrimRight(string(borderLine), " "))
+	lines = append(lines, runeLineToString(borderLine))
 
 	return lines
 }
 
 // buildLifelineWithActivationsAndState builds a lifeline respecting create/destroy state.
 func buildLifelineWithActivationsAndState(layout *diagramLayout, chars BoxChars, actState *activationState, llState *lifelineState) string {
-	line := make([]rune, layout.totalWidth+1)
+	line := make([]string, layout.totalWidth+1)
 	for i := range line {
-		line[i] = ' '
+		line[i] = " "
 	}
 	for pIdx, c := range layout.participantCenters {
 		if c < len(line) && llState.isActive(pIdx) {
 			if actState.isActive(pIdx) {
 				if c-1 >= 0 {
-					line[c-1] = chars.ActivationLeft
+					line[c-1] = string(chars.ActivationLeft)
 				}
-				line[c] = ' '
+				line[c] = " "
 				if c+1 < len(line) {
-					line[c+1] = chars.ActivationRight
+					line[c+1] = string(chars.ActivationRight)
 				}
 			} else {
-				line[c] = chars.Vertical
+				line[c] = string(chars.Vertical)
 			}
 		}
 	}
-	return strings.TrimRight(string(line), " ")
+	return runeLineToString(line)
 }
 
 // renderElementsWithLifeline renders elements with create/destroy awareness.
@@ -595,15 +641,15 @@ func renderInlineParticipant(p *Participant, layout *diagramLayout, chars BoxCha
 
 	totalWidth := layout.totalWidth + labelBufferSpace
 
-	makeRuneLine := func() []rune {
-		r := make([]rune, totalWidth)
+	makeRuneLine := func() []string {
+		r := make([]string, totalWidth)
 		for i := range r {
-			r[i] = ' '
+			r[i] = " "
 		}
 		// Draw other active lifelines
 		for pIdx, c := range layout.participantCenters {
 			if c < len(r) && llState.isActive(pIdx) {
-				r[c] = chars.Vertical
+				r[c] = string(chars.Vertical)
 			}
 		}
 		return r
@@ -613,68 +659,68 @@ func renderInlineParticipant(p *Participant, layout *diagramLayout, chars BoxCha
 	topLine := makeRuneLine()
 	for j := 0; j < boxWidth+boxBorderWidth && leftX+j < len(topLine); j++ {
 		if j == 0 {
-			topLine[leftX+j] = chars.TopLeft
+			topLine[leftX+j] = string(chars.TopLeft)
 		} else if j == boxWidth+boxBorderWidth-1 {
-			topLine[leftX+j] = chars.TopRight
+			topLine[leftX+j] = string(chars.TopRight)
 		} else {
-			topLine[leftX+j] = chars.Horizontal
+			topLine[leftX+j] = string(chars.Horizontal)
 		}
 	}
-	lines = append(lines, strings.TrimRight(string(topLine), " "))
+	lines = append(lines, runeLineToString(topLine))
 
 	// Label line
 	labelLine := makeRuneLine()
-	labelLine[leftX] = chars.Vertical
-	labelLine[leftX+boxWidth+boxBorderWidth-1] = chars.Vertical
+	labelLine[leftX] = string(chars.Vertical)
+	labelLine[leftX+boxWidth+boxBorderWidth-1] = string(chars.Vertical)
 	labelLen := runewidth.StringWidth(p.Label)
 	pad := (boxWidth - labelLen) / 2
 	col := leftX + 1 + pad
 		writeRunes(labelLine, col, p.Label)
-	lines = append(lines, strings.TrimRight(string(labelLine), " "))
+	lines = append(lines, runeLineToString(labelLine))
 
 	// Bottom border with lifeline tee
 	botLine := makeRuneLine()
 	for j := 0; j < boxWidth+boxBorderWidth && leftX+j < len(botLine); j++ {
 		if j == 0 {
-			botLine[leftX+j] = chars.BottomLeft
+			botLine[leftX+j] = string(chars.BottomLeft)
 		} else if j == boxWidth+boxBorderWidth-1 {
-			botLine[leftX+j] = chars.BottomRight
+			botLine[leftX+j] = string(chars.BottomRight)
 		} else if leftX+j == center {
-			botLine[leftX+j] = chars.TeeDown
+			botLine[leftX+j] = string(chars.TeeDown)
 		} else {
-			botLine[leftX+j] = chars.Horizontal
+			botLine[leftX+j] = string(chars.Horizontal)
 		}
 	}
-	lines = append(lines, strings.TrimRight(string(botLine), " "))
+	lines = append(lines, runeLineToString(botLine))
 
 	return lines
 }
 
 // renderDestroyMarker renders an X on the participant's lifeline.
 func renderDestroyMarker(p *Participant, layout *diagramLayout, chars BoxChars, actState *activationState, llState *lifelineState) string {
-	line := make([]rune, layout.totalWidth+1)
+	line := make([]string, layout.totalWidth+1)
 	for i := range line {
-		line[i] = ' '
+		line[i] = " "
 	}
 	for pIdx, c := range layout.participantCenters {
 		if c < len(line) && llState.isActive(pIdx) {
 			if pIdx == p.Index {
 				// Render X
-				line[c] = 'X'
+				line[c] = "X"
 			} else if actState.isActive(pIdx) {
 				if c-1 >= 0 {
-					line[c-1] = chars.ActivationLeft
+					line[c-1] = string(chars.ActivationLeft)
 				}
-				line[c] = ' '
+				line[c] = " "
 				if c+1 < len(line) {
-					line[c+1] = chars.ActivationRight
+					line[c+1] = string(chars.ActivationRight)
 				}
 			} else {
-				line[c] = chars.Vertical
+				line[c] = string(chars.Vertical)
 			}
 		}
 	}
-	return strings.TrimRight(string(line), " ")
+	return runeLineToString(line)
 }
 
 // renderElements renders a list of elements (messages, notes, activations, blocks).
@@ -684,7 +730,7 @@ func renderElements(elements []Element, layout *diagramLayout, chars BoxChars, a
 		switch e := elem.(type) {
 		case *Message:
 			for i := 0; i < layout.messageSpacing; i++ {
-				lines = append(lines, buildLifelineWithActivations(layout, chars, actState))
+				lines = append(lines, runeLineToString(buildLifelineWithActivations(layout, chars, actState)))
 			}
 			if e.From == e.To {
 				lines = append(lines, renderSelfMessage(e, layout, chars, actState)...)
@@ -694,7 +740,7 @@ func renderElements(elements []Element, layout *diagramLayout, chars BoxChars, a
 
 		case *Note:
 			for i := 0; i < layout.messageSpacing; i++ {
-				lines = append(lines, buildLifelineWithActivations(layout, chars, actState))
+				lines = append(lines, runeLineToString(buildLifelineWithActivations(layout, chars, actState)))
 			}
 			lines = append(lines, renderNote(e, layout, chars, actState)...)
 
@@ -707,7 +753,7 @@ func renderElements(elements []Element, layout *diagramLayout, chars BoxChars, a
 
 		case *Block:
 			for i := 0; i < layout.messageSpacing; i++ {
-				lines = append(lines, buildLifelineWithActivations(layout, chars, actState))
+				lines = append(lines, runeLineToString(buildLifelineWithActivations(layout, chars, actState)))
 			}
 			lines = append(lines, renderBlock(e, layout, chars, actState)...)
 		}
@@ -743,28 +789,28 @@ func buildLifeline(layout *diagramLayout, chars BoxChars) string {
 	return strings.TrimRight(string(line), " ")
 }
 
-func buildLifelineWithActivations(layout *diagramLayout, chars BoxChars, actState *activationState) string {
-	line := make([]rune, layout.totalWidth+1)
+func buildLifelineWithActivations(layout *diagramLayout, chars BoxChars, actState *activationState) []string {
+	line := make([]string, layout.totalWidth+1)
 	for i := range line {
-		line[i] = ' '
+		line[i] = " "
 	}
 	for pIdx, c := range layout.participantCenters {
 		if c < len(line) {
 			if actState.isActive(pIdx) {
 				// Draw activation box: │ │ around the lifeline
 				if c-1 >= 0 {
-					line[c-1] = chars.ActivationLeft
+					line[c-1] = string(chars.ActivationLeft)
 				}
-				line[c] = ' '
+				line[c] = " "
 				if c+1 < len(line) {
-					line[c+1] = chars.ActivationRight
+					line[c+1] = string(chars.ActivationRight)
 				}
 			} else {
-				line[c] = chars.Vertical
+				line[c] = string(chars.Vertical)
 			}
 		}
 	}
-	return strings.TrimRight(string(line), " ")
+	return line
 }
 
 // getArrowChars returns the appropriate end characters for a given arrow type.
@@ -796,21 +842,21 @@ func renderMessage(msg *Message, layout *diagramLayout, chars BoxChars, actState
 		start := min(from, to) + labelLeftMargin
 		labelWidth := runewidth.StringWidth(label)
 		w := max(layout.totalWidth, start+labelWidth) + labelBufferSpace
-		line := []rune(buildLifelineWithActivations(layout, chars, actState))
+		line := buildLifelineWithActivations(layout, chars, actState)
 		if len(line) < w {
-			padding := make([]rune, w-len(line))
+			padding := make([]string, w-len(line))
 			for k := range padding {
-				padding[k] = ' '
+				padding[k] = " "
 			}
 			line = append(line, padding...)
 		}
 
 		col := start
 			writeRunes(line, col, label)
-		lines = append(lines, strings.TrimRight(string(line), " "))
+		lines = append(lines, runeLineToString(line))
 	}
 
-	line := []rune(buildLifelineWithActivations(layout, chars, actState))
+	line := buildLifelineWithActivations(layout, chars, actState)
 	style := chars.SolidLine
 	if msg.ArrowType.IsDotted() {
 		style = chars.DottedLine
@@ -819,21 +865,21 @@ func renderMessage(msg *Message, layout *diagramLayout, chars BoxChars, actState
 	rightEnd, leftEnd := getArrowChars(msg.ArrowType, chars)
 
 	if from < to {
-		line[from] = chars.TeeRight
+		line[from] = string(chars.TeeRight)
 		for i := from + 1; i < to; i++ {
-			line[i] = style
+			line[i] = string(style)
 		}
-		line[to-1] = rightEnd
-		line[to] = chars.Vertical
+		line[to-1] = string(rightEnd)
+		line[to] = string(chars.Vertical)
 	} else {
-		line[to] = chars.Vertical
-		line[to+1] = leftEnd
+		line[to] = string(chars.Vertical)
+		line[to+1] = string(leftEnd)
 		for i := to + 2; i < from; i++ {
-			line[i] = style
+			line[i] = string(style)
 		}
-		line[from] = chars.TeeLeft
+		line[from] = string(chars.TeeLeft)
 	}
-	lines = append(lines, strings.TrimRight(string(line), " "))
+	lines = append(lines, runeLineToString(line))
 	return lines
 }
 
@@ -842,17 +888,16 @@ func renderSelfMessage(msg *Message, layout *diagramLayout, chars BoxChars, actS
 	center := layout.participantCenters[msg.From.Index]
 	width := layout.selfMessageWidth
 
-	ensureWidth := func(l string) []rune {
+	ensureWidth := func(l []string) []string {
 		target := layout.totalWidth + width + 1
-		r := []rune(l)
-		if len(r) < target {
-			pad := make([]rune, target-len(r))
+		if len(l) < target {
+			pad := make([]string, target-len(l))
 			for i := range pad {
-				pad[i] = ' '
+				pad[i] = " "
 			}
-			r = append(r, pad...)
+			l = append(l, pad...)
 		}
-		return r
+		return l
 	}
 
 	label := msg.Label
@@ -866,37 +911,37 @@ func renderSelfMessage(msg *Message, layout *diagramLayout, chars BoxChars, actS
 		labelWidth := runewidth.StringWidth(label)
 		needed := start + labelWidth + labelBufferSpace
 		if len(line) < needed {
-			pad := make([]rune, needed-len(line))
+			pad := make([]string, needed-len(line))
 			for i := range pad {
-				pad[i] = ' '
+				pad[i] = " "
 			}
 			line = append(line, pad...)
 		}
 		col := start
 			writeRunes(line, col, label)
-		lines = append(lines, strings.TrimRight(string(line), " "))
+		lines = append(lines, runeLineToString(line))
 	}
 
 	l1 := ensureWidth(buildLifelineWithActivations(layout, chars, actState))
-	l1[center] = chars.TeeRight
+	l1[center] = string(chars.TeeRight)
 	for i := 1; i < width; i++ {
-		l1[center+i] = chars.Horizontal
+		l1[center+i] = string(chars.Horizontal)
 	}
-	l1[center+width-1] = chars.SelfTopRight
-	lines = append(lines, strings.TrimRight(string(l1), " "))
+	l1[center+width-1] = string(chars.SelfTopRight)
+	lines = append(lines, runeLineToString(l1))
 
 	l2 := ensureWidth(buildLifelineWithActivations(layout, chars, actState))
-	l2[center+width-1] = chars.Vertical
-	lines = append(lines, strings.TrimRight(string(l2), " "))
+	l2[center+width-1] = string(chars.Vertical)
+	lines = append(lines, runeLineToString(l2))
 
 	l3 := ensureWidth(buildLifelineWithActivations(layout, chars, actState))
-	l3[center] = chars.Vertical
-	l3[center+1] = chars.ArrowLeft
+	l3[center] = string(chars.Vertical)
+	l3[center+1] = string(chars.ArrowLeft)
 	for i := 2; i < width-1; i++ {
-		l3[center+i] = chars.Horizontal
+		l3[center+i] = string(chars.Horizontal)
 	}
-	l3[center+width-1] = chars.SelfBottom
-	lines = append(lines, strings.TrimRight(string(l3), " "))
+	l3[center+width-1] = string(chars.SelfBottom)
+	lines = append(lines, runeLineToString(l3))
 
 	return lines
 }
@@ -938,13 +983,12 @@ func renderNote(note *Note, layout *diagramLayout, chars BoxChars, actState *act
 		totalWidth = layout.totalWidth + 1
 	}
 
-	makeRuneLine := func() []rune {
-		base := buildLifelineWithActivations(layout, chars, actState)
-		r := []rune(base)
+	makeRuneLine := func() []string {
+		r := buildLifelineWithActivations(layout, chars, actState)
 		if len(r) < totalWidth {
-			pad := make([]rune, totalWidth-len(r))
+			pad := make([]string, totalWidth-len(r))
 			for i := range pad {
-				pad[i] = ' '
+				pad[i] = " "
 			}
 			r = append(r, pad...)
 		}
@@ -955,48 +999,48 @@ func renderNote(note *Note, layout *diagramLayout, chars BoxChars, actState *act
 	topLine := makeRuneLine()
 	for j := startX; j < startX+boxWidth+2 && j < len(topLine); j++ {
 		if j == startX {
-			topLine[j] = chars.TopLeft
+			topLine[j] = string(chars.TopLeft)
 		} else if j == startX+boxWidth+1 {
-			topLine[j] = chars.TopRight
+			topLine[j] = string(chars.TopRight)
 		} else {
-			topLine[j] = chars.Horizontal
+			topLine[j] = string(chars.Horizontal)
 		}
 	}
-	lines = append(lines, strings.TrimRight(string(topLine), " "))
+	lines = append(lines, runeLineToString(topLine))
 
 	// Text line
 	textLine := makeRuneLine()
 	if startX < len(textLine) {
-		textLine[startX] = chars.Vertical
+		textLine[startX] = string(chars.Vertical)
 	}
 	col := startX + 1
 	// padding
 	if col < len(textLine) {
-		textLine[col] = ' '
+		textLine[col] = " "
 		col++
 	}
 	col = writeRunes(textLine, col, note.Text)
 	if col < len(textLine) {
-		textLine[col] = ' '
+		textLine[col] = " "
 		col++
 	}
 	if startX+boxWidth+1 < len(textLine) {
-		textLine[startX+boxWidth+1] = chars.Vertical
+		textLine[startX+boxWidth+1] = string(chars.Vertical)
 	}
-	lines = append(lines, strings.TrimRight(string(textLine), " "))
+	lines = append(lines, runeLineToString(textLine))
 
 	// Bottom border
 	botLine := makeRuneLine()
 	for j := startX; j < startX+boxWidth+2 && j < len(botLine); j++ {
 		if j == startX {
-			botLine[j] = chars.BottomLeft
+			botLine[j] = string(chars.BottomLeft)
 		} else if j == startX+boxWidth+1 {
-			botLine[j] = chars.BottomRight
+			botLine[j] = string(chars.BottomRight)
 		} else {
-			botLine[j] = chars.Horizontal
+			botLine[j] = string(chars.Horizontal)
 		}
 	}
-	lines = append(lines, strings.TrimRight(string(botLine), " "))
+	lines = append(lines, runeLineToString(botLine))
 
 	return lines
 }
@@ -1016,64 +1060,57 @@ func renderBlock(block *Block, layout *diagramLayout, chars BoxChars, actState *
 	setLifelines(topLine, layout, chars, actState)
 	for j := leftX; j <= rightX && j < len(topLine); j++ {
 		if j == leftX {
-			topLine[j] = chars.TopLeft
+			topLine[j] = string(chars.TopLeft)
 		} else if j == rightX {
-			topLine[j] = chars.TopRight
+			topLine[j] = string(chars.TopRight)
 		} else {
-			topLine[j] = chars.Horizontal
+			topLine[j] = string(chars.Horizontal)
 		}
 	}
-	lines = append(lines, strings.TrimRight(string(topLine), " "))
+	lines = append(lines, runeLineToString(topLine))
 
 	// Label line
 	labelLine := makeEmptyLine(layout.totalWidth + labelBufferSpace)
 	setLifelines(labelLine, layout, chars, actState)
 	if leftX < len(labelLine) {
-		labelLine[leftX] = chars.Vertical
+		labelLine[leftX] = string(chars.Vertical)
 	}
 	if rightX < len(labelLine) {
-		labelLine[rightX] = chars.Vertical
+		labelLine[rightX] = string(chars.Vertical)
 	}
 	col := leftX + 2
 		writeRunes(labelLine, col, blockLabel)
-	lines = append(lines, strings.TrimRight(string(labelLine), " "))
+	lines = append(lines, runeLineToString(labelLine))
 
 	// Separator after label
 	sepLine := makeEmptyLine(layout.totalWidth + labelBufferSpace)
 	setLifelines(sepLine, layout, chars, actState)
 	if leftX < len(sepLine) {
-		sepLine[leftX] = chars.Vertical
+		sepLine[leftX] = string(chars.Vertical)
 	}
 	if rightX < len(sepLine) {
-		sepLine[rightX] = chars.Vertical
+		sepLine[rightX] = string(chars.Vertical)
 	}
 	for j := leftX + 1; j < rightX && j < len(sepLine); j++ {
-		if sepLine[j] == chars.Vertical || sepLine[j] == chars.ActivationLeft || sepLine[j] == chars.ActivationRight {
+		if sepLine[j] == string(chars.Vertical) || sepLine[j] == string(chars.ActivationLeft) || sepLine[j] == string(chars.ActivationRight) {
 			continue // don't overwrite lifelines
 		}
-		sepLine[j] = chars.DottedLine
+		sepLine[j] = string(chars.DottedLine)
 	}
-	lines = append(lines, strings.TrimRight(string(sepLine), " "))
+	lines = append(lines, runeLineToString(sepLine))
 
 	// Render block contents
 	contentLines := renderElements(block.Elements, layout, chars, actState)
 	for _, cl := range contentLines {
 		// Add block borders to content lines
-		r := []rune(cl)
-		if len(r) < layout.totalWidth+labelBufferSpace {
-			pad := make([]rune, layout.totalWidth+labelBufferSpace-len(r))
-			for k := range pad {
-				pad[k] = ' '
-			}
-			r = append(r, pad...)
-		}
+		r := stringToLine(cl, layout.totalWidth+labelBufferSpace)
 		if leftX < len(r) {
-			r[leftX] = chars.Vertical
+			r[leftX] = string(chars.Vertical)
 		}
 		if rightX < len(r) {
-			r[rightX] = chars.Vertical
+			r[rightX] = string(chars.Vertical)
 		}
-		lines = append(lines, strings.TrimRight(string(r), " "))
+		lines = append(lines, runeLineToString(r))
 	}
 
 	// Render sections (else/and/option)
@@ -1082,52 +1119,45 @@ func renderBlock(block *Block, layout *diagramLayout, chars BoxChars, actState *
 		divLine := makeEmptyLine(layout.totalWidth + labelBufferSpace)
 		setLifelines(divLine, layout, chars, actState)
 		if leftX < len(divLine) {
-			divLine[leftX] = chars.Vertical
+			divLine[leftX] = string(chars.Vertical)
 		}
 		if rightX < len(divLine) {
-			divLine[rightX] = chars.Vertical
+			divLine[rightX] = string(chars.Vertical)
 		}
 		for j := leftX + 1; j < rightX && j < len(divLine); j++ {
-			if divLine[j] == chars.Vertical || divLine[j] == chars.ActivationLeft || divLine[j] == chars.ActivationRight {
+			if divLine[j] == string(chars.Vertical) || divLine[j] == string(chars.ActivationLeft) || divLine[j] == string(chars.ActivationRight) {
 				continue
 			}
-			divLine[j] = chars.DottedLine
+			divLine[j] = string(chars.DottedLine)
 		}
-		lines = append(lines, strings.TrimRight(string(divLine), " "))
+		lines = append(lines, runeLineToString(divLine))
 
 		// Section label (if any)
 		if section.Label != "" {
 			sLabelLine := makeEmptyLine(layout.totalWidth + labelBufferSpace)
 			setLifelines(sLabelLine, layout, chars, actState)
 			if leftX < len(sLabelLine) {
-				sLabelLine[leftX] = chars.Vertical
+				sLabelLine[leftX] = string(chars.Vertical)
 			}
 			if rightX < len(sLabelLine) {
-				sLabelLine[rightX] = chars.Vertical
+				sLabelLine[rightX] = string(chars.Vertical)
 			}
 			col := leftX + 2
 				writeRunes(sLabelLine, col, section.Label)
-			lines = append(lines, strings.TrimRight(string(sLabelLine), " "))
+			lines = append(lines, runeLineToString(sLabelLine))
 		}
 
 		// Section content
 		sectionContent := renderElements(section.Elements, layout, chars, actState)
 		for _, cl := range sectionContent {
-			r := []rune(cl)
-			if len(r) < layout.totalWidth+labelBufferSpace {
-				pad := make([]rune, layout.totalWidth+labelBufferSpace-len(r))
-				for k := range pad {
-					pad[k] = ' '
-				}
-				r = append(r, pad...)
-			}
+			r := stringToLine(cl, layout.totalWidth+labelBufferSpace)
 			if leftX < len(r) {
-				r[leftX] = chars.Vertical
+				r[leftX] = string(chars.Vertical)
 			}
 			if rightX < len(r) {
-				r[rightX] = chars.Vertical
+				r[rightX] = string(chars.Vertical)
 			}
-			lines = append(lines, strings.TrimRight(string(r), " "))
+			lines = append(lines, runeLineToString(r))
 		}
 	}
 
@@ -1136,39 +1166,39 @@ func renderBlock(block *Block, layout *diagramLayout, chars BoxChars, actState *
 	setLifelines(botLine, layout, chars, actState)
 	for j := leftX; j <= rightX && j < len(botLine); j++ {
 		if j == leftX {
-			botLine[j] = chars.BottomLeft
+			botLine[j] = string(chars.BottomLeft)
 		} else if j == rightX {
-			botLine[j] = chars.BottomRight
+			botLine[j] = string(chars.BottomRight)
 		} else {
-			botLine[j] = chars.Horizontal
+			botLine[j] = string(chars.Horizontal)
 		}
 	}
-	lines = append(lines, strings.TrimRight(string(botLine), " "))
+	lines = append(lines, runeLineToString(botLine))
 
 	return lines
 }
 
-func makeEmptyLine(width int) []rune {
-	line := make([]rune, width)
+func makeEmptyLine(width int) []string {
+	line := make([]string, width)
 	for i := range line {
-		line[i] = ' '
+		line[i] = " "
 	}
 	return line
 }
 
-func setLifelines(line []rune, layout *diagramLayout, chars BoxChars, actState *activationState) {
+func setLifelines(line []string, layout *diagramLayout, chars BoxChars, actState *activationState) {
 	for pIdx, c := range layout.participantCenters {
 		if c < len(line) {
 			if actState.isActive(pIdx) {
 				if c-1 >= 0 {
-					line[c-1] = chars.ActivationLeft
+					line[c-1] = string(chars.ActivationLeft)
 				}
-				line[c] = ' '
+				line[c] = " "
 				if c+1 < len(line) {
-					line[c+1] = chars.ActivationRight
+					line[c+1] = string(chars.ActivationRight)
 				}
 			} else {
-				line[c] = chars.Vertical
+				line[c] = string(chars.Vertical)
 			}
 		}
 	}

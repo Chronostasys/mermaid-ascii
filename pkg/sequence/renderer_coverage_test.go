@@ -473,8 +473,8 @@ func TestSetLifelines(t *testing.T) {
 	setLifelines(line, layout, Unicode, actState)
 
 	for _, c := range layout.participantCenters {
-		if c < len(line) && line[c] != Unicode.Vertical {
-			t.Errorf("Expected vertical at center %d without activation, got %c", c, line[c])
+		if c < len(line) && line[c] != string(Unicode.Vertical) {
+			t.Errorf("Expected vertical at center %d without activation, got %q", c, line[c])
 		}
 	}
 
@@ -484,18 +484,18 @@ func TestSetLifelines(t *testing.T) {
 	setLifelines(line2, layout, Unicode, actState)
 
 	c0 := layout.participantCenters[0]
-	if line2[c0] != Unicode.Vertical {
-		t.Errorf("Participant 0 should have simple vertical, got %c", line2[c0])
+	if line2[c0] != string(Unicode.Vertical) {
+		t.Errorf("Participant 0 should have simple vertical, got %q", line2[c0])
 	}
 	c1 := layout.participantCenters[1]
-	if line2[c1-1] != Unicode.ActivationLeft {
-		t.Errorf("Participant 1 should have activation left, got %c", line2[c1-1])
+	if line2[c1-1] != string(Unicode.ActivationLeft) {
+		t.Errorf("Participant 1 should have activation left, got %q", line2[c1-1])
 	}
-	if line2[c1] != ' ' {
-		t.Errorf("Participant 1 center should be space during activation, got %c", line2[c1])
+	if line2[c1] != " " {
+		t.Errorf("Participant 1 center should be space during activation, got %q", line2[c1])
 	}
-	if line2[c1+1] != Unicode.ActivationRight {
-		t.Errorf("Participant 1 should have activation right, got %c", line2[c1+1])
+	if line2[c1+1] != string(Unicode.ActivationRight) {
+		t.Errorf("Participant 1 should have activation right, got %q", line2[c1+1])
 	}
 }
 
@@ -1001,9 +1001,9 @@ func TestMakeEmptyLine(t *testing.T) {
 	if len(line) != 10 {
 		t.Errorf("Expected length 10, got %d", len(line))
 	}
-	for i, r := range line {
-		if r != ' ' {
-			t.Errorf("Expected space at index %d, got %c", i, r)
+	for i, s := range line {
+		if s != " " {
+			t.Errorf("Expected space at index %d, got %q", i, s)
 		}
 	}
 }
